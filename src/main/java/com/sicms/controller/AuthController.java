@@ -5,6 +5,7 @@ import com.sicms.entity.User;
 import com.sicms.repository.UserRepository;
 import com.sicms.security.CustomUserDetails;
 import com.sicms.service.AuthService;
+import com.sicms.service.EmailService;
 import com.sicms.service.GoogleAuthService;
 import com.sicms.service.OtpService;
 import jakarta.validation.Valid;
@@ -23,16 +24,19 @@ public class AuthController {
     private final GoogleAuthService googleAuthService;
     private final OtpService otpService;
     private final UserRepository userRepository;
+    private final EmailService emailService;
 
     public AuthController(
             AuthService authService,
             GoogleAuthService googleAuthService,
             OtpService otpService,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            EmailService emailService) {
         this.authService = authService;
         this.googleAuthService = googleAuthService;
         this.otpService = otpService;
         this.userRepository = userRepository;
+        this.emailService = emailService;
     }
 
     @PostMapping("/login")
@@ -55,9 +59,9 @@ public class AuthController {
                 "message", "OTP sent successfully to " + request.getEmail()));
     }
 
-    @GetMapping("/test-email")
-    public ResponseEntity<String> testEmail(@RequestParam String to) {
-        otpService.generateAndSendOtp(to, com.sicms.entity.OtpPurpose.LOGIN);
+    @GetMapping({"/test-email", "/test-mail"})
+    public ResponseEntity<String> testEmail(@RequestParam(defaultValue = "dhanyaande@gmail.com") String to) {
+        emailService.sendStandaloneTestEmail(to);
         return ResponseEntity.ok("Test email sent through Brevo SMTP to " + to);
     }
 
