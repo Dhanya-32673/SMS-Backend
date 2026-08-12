@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -46,7 +47,7 @@ public class EmailService {
     }
 
     @PostConstruct
-    public void logMailConfig() {
+    public void logMailConfigAndTestSmtp() {
         System.out.println("============================================");
         System.out.println("BREVO SMTP DIAGNOSTICS LOADED");
         System.out.println("SMTP Host     : " + host);
@@ -57,10 +58,37 @@ public class EmailService {
         System.out.println("STARTTLS      : " + starttlsEnable);
         System.out.println("SSL Enabled   : " + sslEnable);
         System.out.println("============================================");
+
+        // Sender Email Verification Check
+        if (fromEmail == null || fromEmail.isBlank() || !fromEmail.contains("@")) {
+            log.warning(">>> BREVO SENDER VERIFICATION WARNING: app.mail.from (" + fromEmail + ") is unconfigured or invalid. Verify sender in Brevo -> Senders & Domains -> Senders.");
+        } else {
+            System.out.println(">>> BREVO SENDER IDENTITY VERIFIED: " + fromEmail);
+        }
+
+        // Startup SMTP Test (Connect without sending email)
+        testSmtpAuthOnStartup();
+    }
+
+    /**
+     * Performs a non-intrusive SMTP authentication test on startup.
+     */
+    public void testSmtpAuthOnStartup() {
+        if (mailSender instanceof JavaMailSenderImpl mailSenderImpl) {
+            try {
+                mailSenderImpl.testConnection();
+                System.out.println(">>> BREVO SMTP AUTH SUCCESS: Authenticated successfully with " + host + ":" + port);
+                log.info("BREVO SMTP AUTH SUCCESS");
+            } catch (Exception e) {
+                System.err.println(">>> BREVO SMTP AUTH FAILED: " + e.getMessage());
+                log.warning("BREVO SMTP AUTH FAILED: " + e.getMessage() + " — Check Brevo Dashboard -> Transactional -> SMTP & API -> SMTP Keys.");
+            }
+        }
     }
 
     public void sendOtp(String to, String otp) {
         try {
+            log.info("OTP email request received for: " + to);
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
@@ -69,7 +97,9 @@ public class EmailService {
             helper.setSubject("Your OTP Code");
             helper.setText("<h3>Your OTP is: <b>" + otp + "</b></h3>", true);
 
+            System.out.println(">>> SMTP CONNECTION STARTED: " + host + ":" + port);
             mailSender.send(message);
+            System.out.println(">>> SMTP AUTHENTICATION & DISPATCH SUCCEEDED FOR: " + to);
             log.info("OTP email sent successfully to " + to);
         } catch (Exception e) {
             log.warning("BREVO SMTP WARNING: Failed to send OTP email: " + e.getMessage());
@@ -95,6 +125,8 @@ public class EmailService {
     }
 
     public void sendOtpEmailSync(String toEmail, String otpCode, String purpose) {
+        log.info("OTP email request received for: " + toEmail + " (Purpose: " + purpose + ")");
+        
         String timeStr = LocalTime.now().format(DateTimeFormatter.ofPattern("hh:mm:ss a"));
         String subject = "[" + timeStr + "] Your Login OTP - SICMS";
         if ("PASSWORD_RESET".equalsIgnoreCase(purpose) || "FORGOT_PASSWORD".equalsIgnoreCase(purpose)) {
@@ -121,7 +153,7 @@ public class EmailService {
             """, otpCode, otpCode);
 
         System.out.println("=================================================");
-        System.out.println(">>> CONNECTING TO BREVO SMTP SERVER: " + host + ":" + port + " (STARTTLS=" + starttlsEnable + ", SSL=" + sslEnable + ")");
+        System.out.println(">>> SMTP CONNECTION STARTED: " + host + ":" + port + " (STARTTLS=" + starttlsEnable + ", SSL=" + sslEnable + ")");
         System.out.println(">>> DISPATCHING OTP EMAIL TO: [" + toEmail + "] Purpose: " + purpose);
         System.out.println(">>> OTP CODE GENERATED: [ " + otpCode + " ]");
         System.out.println("=================================================");
@@ -135,11 +167,12 @@ public class EmailService {
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
+            System.out.println(">>> BREVO SMTP AUTHENTICATION SUCCEEDED!");
+            System.out.println(">>> EMAIL SENT SUCCESSFULLY TO: [" + toEmail + "]");
             log.info("OTP email sent successfully to " + toEmail);
-            System.out.println(">>> BREVO SMTP CONNECTION SUCCESS: OTP EMAIL SENT TO: [" + toEmail + "]");
         } catch (Exception ex) {
-            log.log(Level.SEVERE, "Failed to send OTP email via Brevo SMTP", ex);
-            System.err.println(">>> BREVO SMTP ERROR: " + ex.getMessage());
+            log.log(Level.SEVERE, "SMTP AUTHENTICATION OR DISPATCH FAILURE: " + ex.getMessage(), ex);
+            System.err.println(">>> BREVO SMTP AUTHENTICATION/DISPATCH ERROR: " + ex.getMessage());
             throw new RuntimeException("Unable to send OTP email: " + ex.getMessage(), ex);
         }
     }
