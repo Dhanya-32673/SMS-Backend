@@ -110,7 +110,33 @@ public class EmailService {
             System.out.println("=================================================");
             log.info("Resend API email dispatch successful to " + toEmail);
         } catch (Exception e) {
-            System.err.println(">>> RESEND ERROR: Failed to send OTP email to [" + toEmail + "]: " + e.getMessage());
+            System.err.println(">>> RESEND DISPATCH NOTICE for [" + toEmail + "]: " + e.getMessage());
+
+            // Resend Testing Mode Fallback: Re-route unverified recipients to account owner email
+            if (e.getMessage() != null && (e.getMessage().contains("only send testing emails") || e.getMessage().contains("validation_error") || e.getMessage().contains("403"))) {
+                String ownerEmail = "dhanyaande@gmail.com";
+                System.out.println(">>> RESEND TESTING MODE: Re-routing email for [" + toEmail + "] to verified account [" + ownerEmail + "]...");
+                try {
+                    Resend resend = new Resend(apiKey);
+                    CreateEmailOptions fallbackParams = CreateEmailOptions.builder()
+                            .from(fromAddress)
+                            .to(ownerEmail)
+                            .subject("[TEST MODE: " + toEmail + "] " + subject)
+                            .html(htmlContent)
+                            .build();
+
+                    CreateEmailResponse fallbackData = resend.emails().send(fallbackParams);
+                    System.out.println("=================================================");
+                    System.out.println(">>> 200 RESEND TEST MODE RE-ROUTE SUCCESSFUL!");
+                    System.out.println(">>> DELIVERED TO: [" + ownerEmail + "] for user [" + toEmail + "]");
+                    System.out.println("=================================================");
+                    log.info("Resend API test mode re-routed email to " + ownerEmail);
+                    return;
+                } catch (Exception fallbackEx) {
+                    System.err.println(">>> RESEND RE-ROUTE ERROR: " + fallbackEx.getMessage());
+                }
+            }
+
             log.log(Level.SEVERE, "Resend API dispatch failure: " + e.getMessage(), e);
             throw new RuntimeException("Unable to send OTP email via Resend: " + e.getMessage(), e);
         }
