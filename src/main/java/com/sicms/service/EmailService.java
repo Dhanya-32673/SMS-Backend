@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -22,10 +23,10 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.host}")
+    @Value("${spring.mail.host:smtp-relay.brevo.com}")
     private String host;
 
-    @Value("${spring.mail.port}")
+    @Value("${spring.mail.port:465}")
     private int port;
 
     @Value("${spring.mail.username}")
@@ -34,16 +35,16 @@ public class EmailService {
     @Value("${spring.mail.password:}")
     private String password;
 
-    @Value("${app.mail.from}")
+    @Value("${app.mail.from:bhashyamgnt.edu@gmail.com}")
     private String fromEmail;
 
     @Value("${spring.mail.properties.mail.smtp.auth:true}")
     private boolean smtpAuth;
 
-    @Value("${spring.mail.properties.mail.smtp.starttls.enable:true}")
+    @Value("${spring.mail.properties.mail.smtp.starttls.enable:false}")
     private boolean starttlsEnable;
 
-    @Value("${spring.mail.properties.mail.smtp.ssl.enable:false}")
+    @Value("${spring.mail.properties.mail.smtp.ssl.enable:true}")
     private boolean sslEnable;
 
     public EmailService(JavaMailSender mailSender) {
@@ -65,7 +66,7 @@ public class EmailService {
 
         // Password Validation Check
         if (password == null || password.isBlank() || password.contains("your_brevo_password_here")) {
-            log.warning(">>> BREVO KEY WARNING: spring.mail.password is unconfigured or set to placeholder text. Ensure SPRING_MAIL_PASSWORD is set in .env file.");
+            log.warning(">>> BREVO KEY WARNING: spring.mail.password is unconfigured or set to placeholder text. Ensure SPRING_MAIL_PASSWORD is set in Render environment variables.");
         }
 
         // Sender Email Verification Check
@@ -80,7 +81,7 @@ public class EmailService {
     }
 
     /**
-     * Performs a non-intrusive SMTP authentication test on startup.
+     * Performs a non-intrusive SMTP authentication test on startup with Port 465 SSL fallback.
      */
     public void testSmtpAuthOnStartup() {
         if (mailSender instanceof JavaMailSenderImpl mailSenderImpl) {
@@ -89,21 +90,39 @@ public class EmailService {
                 System.out.println(">>> BREVO SMTP AUTH SUCCESS: Authenticated successfully with " + host + ":" + port);
                 log.info("BREVO SMTP AUTH SUCCESS");
             } catch (Exception e) {
-                System.err.println(">>> BREVO SMTP AUTH FAILED: " + e.getMessage());
-                log.warning("BREVO SMTP AUTH FAILED: " + e.getMessage() + " — Check Brevo Dashboard -> Transactional -> SMTP & API -> SMTP Keys.");
+                System.err.println(">>> BREVO SMTP AUTH WARNING (" + host + ":" + port + "): " + e.getMessage());
+                // If Port 587 timed out on Render due to firewall blocking, attempt fallback to Port 465 SSL
+                if (port == 587 && e.getMessage() != null && e.getMessage().contains("Couldn't connect")) {
+                    System.out.println(">>> ATTEMPTING AUTOMATIC FALLBACK TO BREVO PORT 465 SSL...");
+                    try {
+                        mailSenderImpl.setPort(465);
+                        Properties props = mailSenderImpl.getJavaMailProperties();
+                        props.put("mail.smtp.ssl.enable", "true");
+                        props.put("mail.smtp.starttls.enable", "false");
+                        mailSenderImpl.testConnection();
+                        this.port = 465;
+                        this.sslEnable = true;
+                        this.starttlsEnable = false;
+                        System.out.println(">>> BREVO SMTP PORT 465 SSL FALLBACK SUCCESSFUL!");
+                        log.info("BREVO SMTP PORT 465 SSL FALLBACK SUCCESSFUL");
+                    } catch (Exception ex) {
+                        System.err.println(">>> BREVO SMTP PORT 465 FALLBACK FAILED: " + ex.getMessage());
+                        log.warning("BREVO SMTP PORT 465 FALLBACK FAILED: " + ex.getMessage());
+                    }
+                }
             }
         }
     }
 
     /**
-     * Standalone simple email test method for local development verification.
+     * Standalone simple email test method for verification.
      */
     public void sendStandaloneTestEmail(String recipient) {
         try {
             SimpleMailMessage msg = new SimpleMailMessage();
             msg.setTo(recipient != null && !recipient.isBlank() ? recipient : "dhanyaande@gmail.com");
-            msg.setSubject("Brevo Localhost Test");
-            msg.setText("SMTP test from localhost");
+            msg.setSubject("Brevo SMTP Test");
+            msg.setText("SMTP test message");
             msg.setFrom(fromEmail);
 
             mailSender.send(msg);
@@ -116,26 +135,7 @@ public class EmailService {
     }
 
     public void sendOtp(String to, String otp) {
-        try {
-            log.info("OTP email request received for: " + to);
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(to);
-            helper.setSubject("Your OTP Code");
-            helper.setText("<h3>Your OTP is: <b>" + otp + "</b></h3>", true);
-
-            System.out.println(">>> SMTP CONNECTION STARTED: " + host + ":" + port);
-            mailSender.send(message);
-            System.out.println(">>> SMTP AUTHENTICATION & DISPATCH SUCCEEDED FOR: " + to);
-            log.info("OTP email sent successfully to " + to);
-        } catch (Exception e) {
-            log.warning("BREVO SMTP WARNING: Failed to send OTP email: " + e.getMessage());
-            System.out.println("=================================================");
-            System.out.println(">>> FALLBACK OTP DISPATCH CODE FOR [" + to + "]: [ " + otp + " ]");
-            System.out.println("=================================================");
-        }
+        sendOtpEmailSync(to, otp, "LOGIN");
     }
 
     public void sendTestEmail(String toEmail) {
@@ -202,6 +202,36 @@ public class EmailService {
         } catch (Exception ex) {
             log.log(Level.SEVERE, "SMTP AUTHENTICATION OR DISPATCH FAILURE: " + ex.getMessage(), ex);
             System.err.println(">>> BREVO SMTP AUTHENTICATION/DISPATCH ERROR: " + ex.getMessage());
+
+            // If Port 587 timed out on Render during send, try fallback to Port 465 SSL
+            if (mailSender instanceof JavaMailSenderImpl mailSenderImpl && port == 587 && ex.getMessage() != null && ex.getMessage().contains("Couldn't connect")) {
+                System.out.println(">>> RETRYING DISPATCH WITH BREVO PORT 465 SSL FALLBACK...");
+                try {
+                    mailSenderImpl.setPort(465);
+                    Properties props = mailSenderImpl.getJavaMailProperties();
+                    props.put("mail.smtp.ssl.enable", "true");
+                    props.put("mail.smtp.starttls.enable", "false");
+
+                    MimeMessage message = mailSenderImpl.createMimeMessage();
+                    MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+                    helper.setFrom(fromEmail);
+                    helper.setTo(toEmail);
+                    helper.setSubject(subject);
+                    helper.setText(htmlContent, true);
+
+                    mailSenderImpl.send(message);
+                    this.port = 465;
+                    this.sslEnable = true;
+                    this.starttlsEnable = false;
+                    System.out.println(">>> 235 Authentication successful (via Port 465 SSL Fallback)");
+                    System.out.println(">>> MAIL SENT SUCCESSFULLY TO: [" + toEmail + "]");
+                    log.info("OTP email sent successfully to " + toEmail + " via Port 465 SSL Fallback");
+                    return;
+                } catch (Exception retryEx) {
+                    System.err.println(">>> PORT 465 RETRY ALSO FAILED: " + retryEx.getMessage());
+                }
+            }
+
             throw new RuntimeException("Unable to send OTP email: " + ex.getMessage(), ex);
         }
     }
