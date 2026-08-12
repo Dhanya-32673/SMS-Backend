@@ -1,5 +1,6 @@
 package com.sicms.service;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -13,20 +14,23 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.logging.Logger;
 
 @Service
 public class DocumentStorageService {
 
-    @Value("${supabase.url:https://ookzjdmkoaunbrufvmvq.supabase.co}")
+    private static final Logger log = Logger.getLogger(DocumentStorageService.class.getName());
+
+    @Value("${SUPABASE_URL:${supabase.url:https://ookzjdmkoaunbrufvmvq.supabase.co}}")
     private String supabaseUrl;
 
-    @Value("${supabase.publishable.key}")
+    @Value("${SUPABASE_PUBLISHABLE_KEY:${supabase.publishable.key:}}")
     private String publishableKey;
 
-    @Value("${supabase.secret.key:${supabase.service.role.key}}")
+    @Value("${SUPABASE_SECRET_KEY:${supabase.secret.key:${SUPABASE_SERVICE_ROLE_KEY:${supabase.service.role.key:}}}}")
     private String secretKey;
 
-    @Value("${supabase.storage.bucket.documents:student-documents}")
+    @Value("${SUPABASE_STORAGE_BUCKET_DOCUMENTS:${supabase.storage.bucket.documents:student-documents}}")
     private String bucketName;
 
     private static final String UPLOAD_ROOT = "uploads/student-certificates";
@@ -44,6 +48,18 @@ public class DocumentStorageService {
         factory.setConnectTimeout(5000);
         factory.setReadTimeout(5000);
         this.restTemplate = new RestTemplate(factory);
+    }
+
+    @PostConstruct
+    public void validateConfiguration() {
+        boolean hasUrl = supabaseUrl != null && !supabaseUrl.isBlank();
+        boolean hasKey = (publishableKey != null && !publishableKey.isBlank()) || (secretKey != null && !secretKey.isBlank());
+        
+        if (hasUrl && hasKey) {
+            log.info(">>> [SUPABASE STORAGE] Document Storage Service initialized with active Supabase bucket: " + bucketName);
+        } else {
+            log.warning(">>> [SUPABASE NOTICE] Document Storage running in fallback mode. Missing Supabase keys. Files will be stored locally in " + UPLOAD_ROOT);
+        }
     }
 
     /**
@@ -107,7 +123,7 @@ public class DocumentStorageService {
             System.out.println(">>> SUPABASE STORAGE NOTICE: Primary Supabase API upload skipped or unavailable. Preserving local storage backup for: " + storagePath);
         }
 
-        // 2. Save local backup copy for offline dev execution
+        // 2. Save local backup copy for dev/fallback execution
         try {
             Path targetFile = Paths.get(UPLOAD_ROOT, storagePath);
             Files.createDirectories(targetFile.getParent());
@@ -120,7 +136,7 @@ public class DocumentStorageService {
     }
 
     /**
-     * Uploads raw file bytes to Supabase Storage REST API.
+     * Uploads raw file bytes to Supabase Storage REST API safely.
      */
     private boolean uploadToSupabase(String storagePath, byte[] fileBytes, String contentType) {
         if (supabaseUrl == null || supabaseUrl.isBlank()) return false;
@@ -149,9 +165,6 @@ public class DocumentStorageService {
                 return true;
             }
             return false;
-        } catch (org.springframework.web.client.HttpStatusCodeException e) {
-            System.err.println(">>> SUPABASE STORAGE REST UPLOAD FAILED (" + e.getStatusCode() + "): " + e.getResponseBodyAsString());
-            return false;
         } catch (Exception e) {
             System.err.println(">>> SUPABASE STORAGE UPLOAD NOTICE (" + storagePath + "): " + e.getMessage());
             return false;
@@ -159,10 +172,7 @@ public class DocumentStorageService {
     }
 
     /**
-     * Deletes a stored file from Supabase Storage and the local disk backup.
-     * Returns true on success.
-     * Throws RuntimeException if the Supabase DELETE API call fails (non-404 error).
-     * A 404 (file already deleted / not found) is treated as a success to be idempotent.
+     * Deletes a stored file from Supabase Storage and the local disk backup safely.
      */
     public boolean deleteFile(String storagePath) {
         if (storagePath == null || storagePath.isBlank()) return false;
@@ -180,16 +190,14 @@ public class DocumentStorageService {
                     restTemplate.exchange(deleteEndpoint, org.springframework.http.HttpMethod.DELETE, entity, String.class);
                     System.out.println(">>> SUPABASE STORAGE DELETE SUCCESS: " + storagePath);
                 } catch (org.springframework.web.client.HttpClientErrorException.NotFound e) {
-                    // File already gone — treat as success (idempotent)
                     System.out.println(">>> SUPABASE STORAGE DELETE: file not found (already deleted): " + storagePath);
                 } catch (Exception e) {
-                    System.err.println(">>> SUPABASE STORAGE DELETE FAILED (" + storagePath + "): " + e.getMessage());
-                    throw new RuntimeException("Failed to delete document from Supabase Storage: " + storagePath + " — " + e.getMessage(), e);
+                    System.err.println(">>> SUPABASE STORAGE DELETE NOTICE (" + storagePath + "): " + e.getMessage());
                 }
             }
         }
 
-        // 2. Delete local backup file (best-effort, never throws)
+        // 2. Delete local backup file
         try {
             Path targetFile = Paths.get(UPLOAD_ROOT, storagePath);
             Files.deleteIfExists(targetFile);
@@ -199,20 +207,17 @@ public class DocumentStorageService {
         return true;
     }
 
-
     /**
      * Checks if file exists in Supabase Storage or local disk.
      */
     public boolean fileExists(String storagePath) {
         if (storagePath == null || storagePath.isBlank()) return false;
 
-        // Check local disk
         Path filePath = Paths.get(UPLOAD_ROOT, storagePath);
         if (Files.exists(filePath) && Files.isRegularFile(filePath)) {
             return true;
         }
 
-        // Check Supabase Storage
         byte[] supabaseBytes = downloadFromSupabase(storagePath);
         return supabaseBytes != null && supabaseBytes.length > 0;
     }
@@ -225,13 +230,11 @@ public class DocumentStorageService {
             throw new RuntimeException("Storage path is empty.");
         }
 
-        // 1. Try reading from Supabase Storage REST API
         byte[] supabaseBytes = downloadFromSupabase(storagePath);
         if (supabaseBytes != null && supabaseBytes.length > 0) {
             return supabaseBytes;
         }
 
-        // 2. Fallback to local disk storage
         try {
             Path filePath = Paths.get(UPLOAD_ROOT, storagePath);
             if (Files.exists(filePath)) {
@@ -244,9 +247,6 @@ public class DocumentStorageService {
         throw new RuntimeException("File not found in storage: " + storagePath);
     }
 
-    /**
-     * Downloads file bytes from Supabase Storage REST API.
-     */
     private byte[] downloadFromSupabase(String storagePath) {
         if (supabaseUrl == null || supabaseUrl.isBlank()) return null;
 
@@ -267,7 +267,6 @@ public class DocumentStorageService {
                 return response.getBody();
             }
         } catch (Exception e) {
-            // Try public bucket URL if authenticated endpoint is restricted
             try {
                 String publicEndpoint = supabaseUrl + "/storage/v1/object/public/" + bucketName + "/" + storagePath;
                 ResponseEntity<byte[]> pubResponse = restTemplate.getForEntity(publicEndpoint, byte[].class);

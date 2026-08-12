@@ -1,6 +1,7 @@
 package com.sicms.service;
 
 import com.sicms.exception.AuthException;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -14,23 +15,26 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.logging.Logger;
 
 @Service
 public class StudentPhotoService {
 
+    private static final Logger log = Logger.getLogger(StudentPhotoService.class.getName());
+
     private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList("image/jpeg", "image/png", "image/jpg");
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
-    @Value("${supabase.url:https://ookzjdmkoaunbrufvmvq.supabase.co}")
+    @Value("${SUPABASE_URL:${supabase.url:https://ookzjdmkoaunbrufvmvq.supabase.co}}")
     private String supabaseUrl;
 
-    @Value("${supabase.publishable.key}")
+    @Value("${SUPABASE_PUBLISHABLE_KEY:${supabase.publishable.key:}}")
     private String publishableKey;
 
-    @Value("${supabase.secret.key:${supabase.service.role.key}}")
+    @Value("${SUPABASE_SECRET_KEY:${supabase.secret.key:${SUPABASE_SERVICE_ROLE_KEY:${supabase.service.role.key:}}}}")
     private String secretKey;
 
-    @Value("${supabase.storage.bucket.photos:student-profile-photos}")
+    @Value("${SUPABASE_STORAGE_BUCKET_PHOTOS:${supabase.storage.bucket.photos:student-profile-photos}}")
     private String storageBucket;
 
     private final RestTemplate restTemplate;
@@ -40,6 +44,18 @@ public class StudentPhotoService {
         factory.setConnectTimeout(5000);
         factory.setReadTimeout(5000);
         this.restTemplate = new RestTemplate(factory);
+    }
+
+    @PostConstruct
+    public void validateConfiguration() {
+        boolean hasUrl = supabaseUrl != null && !supabaseUrl.isBlank();
+        boolean hasKey = (publishableKey != null && !publishableKey.isBlank()) || (secretKey != null && !secretKey.isBlank());
+
+        if (hasUrl && hasKey) {
+            log.info(">>> [SUPABASE PHOTOS] Student Photo Service initialized with bucket: " + storageBucket);
+        } else {
+            log.warning(">>> [SUPABASE NOTICE] Student Photo Service running with fallback URL handling. Supabase auth keys unconfigured.");
+        }
     }
 
     public void validatePhoto(MultipartFile file) {
@@ -143,46 +159,31 @@ public class StudentPhotoService {
             }
             return false;
         } catch (Exception e) {
-            System.err.println(">>> SUPABASE PHOTO UPLOAD ERROR (" + storagePath + "): " + e.getMessage());
+            System.err.println(">>> SUPABASE PHOTO UPLOAD NOTICE (" + storagePath + "): " + e.getMessage());
             return false;
         }
     }
 
-    /**
-     * Extracts the relative storage object path from a full Supabase public URL.
-     * Input:  https://<project>.supabase.co/storage/v1/object/public/student-profile-photos/students/STU.../abc.jpg
-     * Output: students/STU.../abc.jpg
-     */
     private String extractStoragePathFromUrl(String url) {
         if (url == null || url.isBlank()) return url;
-        // Handle full public URL: .../object/public/<bucket>/<path>
         String publicMarker = "/object/public/" + storageBucket + "/";
         if (url.contains(publicMarker)) {
             return url.substring(url.indexOf(publicMarker) + publicMarker.length());
         }
-        // Handle full authenticated URL: .../object/authenticated/<bucket>/<path>
         String authMarker = "/object/authenticated/" + storageBucket + "/";
         if (url.contains(authMarker)) {
             return url.substring(url.indexOf(authMarker) + authMarker.length());
         }
-        // Handle .../object/<bucket>/<path>
         String objectMarker = "/object/" + storageBucket + "/";
         if (url.contains(objectMarker)) {
             return url.substring(url.indexOf(objectMarker) + objectMarker.length());
         }
-        // Already a relative path - strip any leading bucket name prefix
         if (url.startsWith(storageBucket + "/")) {
             return url.substring(storageBucket.length() + 1);
         }
         return url;
     }
 
-    /**
-     * Deletes a student or faculty photo from Supabase Storage.
-     * Accepts either a full public URL or a relative storage path.
-     * Returns true on success, false if file was not found or already deleted.
-     * Throws RuntimeException if the deletion request itself fails unexpectedly.
-     */
     public boolean deletePhotoFile(String urlOrPath) {
         if (urlOrPath == null || urlOrPath.isBlank()) return false;
         if (supabaseUrl == null || supabaseUrl.isBlank()) return false;
@@ -190,7 +191,6 @@ public class StudentPhotoService {
         String authKey = (secretKey != null && !secretKey.isBlank()) ? secretKey : publishableKey;
         if (authKey == null || authKey.isBlank()) return false;
 
-        // Extract the relative path (strip full URL prefix if present)
         String cleanPath = extractStoragePathFromUrl(urlOrPath);
 
         try {
@@ -203,12 +203,11 @@ public class StudentPhotoService {
             System.out.println(">>> SUPABASE PHOTO DELETE SUCCESS: " + cleanPath);
             return true;
         } catch (org.springframework.web.client.HttpClientErrorException.NotFound e) {
-            // File already gone — treat as success
             System.out.println(">>> SUPABASE PHOTO DELETE: file not found (already deleted): " + cleanPath);
             return true;
         } catch (Exception e) {
-            System.err.println(">>> SUPABASE PHOTO DELETE FAILED (" + cleanPath + "): " + e.getMessage());
-            throw new RuntimeException("Failed to delete photo from Supabase Storage: " + cleanPath + " — " + e.getMessage(), e);
+            System.err.println(">>> SUPABASE PHOTO DELETE NOTICE (" + cleanPath + "): " + e.getMessage());
+            return false;
         }
     }
 }
