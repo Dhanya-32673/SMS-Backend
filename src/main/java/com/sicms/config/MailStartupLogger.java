@@ -8,6 +8,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Logger;
 
 @Component
@@ -29,11 +30,14 @@ public class MailStartupLogger implements CommandLineRunner {
     @Value("${spring.mail.port:587}")
     private int mailPort;
 
-    @Value("${spring.mail.username:b5073a001@smtp-brevo.com}")
+    @Value("${spring.mail.username:}")
     private String mailUsername;
 
     @Value("${spring.mail.password:}")
     private String mailPassword;
+
+    @Value("${app.mail.from:bhashyamgnt.edu@gmail.com}")
+    private String mailFrom;
 
     @Value("${spring.mail.properties.mail.smtp.starttls.enable:true}")
     private boolean starttlsEnable;
@@ -50,28 +54,54 @@ public class MailStartupLogger implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        String activeProfile = Arrays.toString(env.getActiveProfiles());
+        List<String> activeProfilesList = Arrays.asList(env.getActiveProfiles());
+        String activeProfile = activeProfilesList.toString();
+
+        String trimmedUsername = mailUsername != null ? mailUsername.trim() : "";
+        String trimmedPassword = mailPassword != null ? mailPassword.trim() : "";
+
+        boolean usernamePresent = !trimmedUsername.isEmpty();
+        boolean passwordPresent = !trimmedPassword.isEmpty();
+
+        boolean isPlaceholderPassword = trimmedPassword.contains("your_brevo_password_here") ||
+                trimmedPassword.contains("CHANGE_ME") ||
+                trimmedPassword.equalsIgnoreCase("PASSWORD") ||
+                trimmedPassword.contains("example") ||
+                trimmedPassword.contains("REPLACE_WITH_REAL") ||
+                trimmedPassword.contains("PASTE_REAL_BREVO_SMTP_KEY");
 
         System.out.println("=================================================");
         System.out.println(">>> STARTUP DIAGNOSTICS & MAIL CONFIGURATION");
-        System.out.println(">>> Active Profile     : " + activeProfile);
-        System.out.println(">>> Datasource URL     : " + dbUrl);
-        System.out.println(">>> Datasource Username: " + dbUsername);
-        System.out.println(">>> SMTP Host          : " + mailHost);
-        System.out.println(">>> SMTP Port          : " + mailPort);
-        System.out.println(">>> SMTP Username      : " + mailUsername);
-        System.out.println(">>> STARTTLS Enabled   : " + starttlsEnable);
-        System.out.println(">>> SSL Enabled        : " + sslEnable);
+        System.out.println(">>> Active Profile         : " + activeProfile);
+        System.out.println(">>> Datasource URL         : " + dbUrl);
+        System.out.println(">>> Datasource Username    : " + dbUsername);
+        System.out.println(">>> SMTP Host              : " + mailHost);
+        System.out.println(">>> SMTP Port              : " + mailPort);
+        System.out.println(">>> SMTP Username          : " + mailUsername);
+        System.out.println(">>> Sender Address         : " + mailFrom);
+        System.out.println(">>> STARTTLS Enabled       : " + starttlsEnable);
+        System.out.println(">>> SSL Enabled            : " + sslEnable);
+        System.out.println(">>> SPRING_MAIL_USERNAME present: " + usernamePresent);
+        System.out.println(">>> SPRING_MAIL_PASSWORD present: " + (passwordPresent && !isPlaceholderPassword));
         System.out.println("=================================================");
 
-        if (mailPassword == null || mailPassword.isBlank() || mailPassword.contains("your_brevo_password_here") || mailPassword.contains("REPLACE_WITH_REAL")) {
-            log.warning(">>> BREVO SMTP PASSWORD WARNING: Password is missing or using placeholder text. Set SPRING_MAIL_PASSWORD in environment variables.");
+        // Verify Brevo Sender Identity
+        if (!"bhashyamgnt.edu@gmail.com".equalsIgnoreCase(mailFrom.trim())) {
+            log.warning(">>> BREVO SENDER WARNING: app.mail.from (" + mailFrom + ") is not the primary verified Brevo sender identity. Expected: bhashyamgnt.edu@gmail.com");
         }
 
-        // Run standalone SMTP test if running with local profile
-        if (Arrays.asList(env.getActiveProfiles()).contains("local") && emailService != null) {
-            System.out.println(">>> RUNNING LOCAL PROFILE STANDALONE SMTP TEST...");
-            emailService.sendStandaloneTestEmail("dhanyaande@gmail.com");
+        // Fail-Fast Validation in Production
+        if (activeProfilesList.contains("prod")) {
+            if (!passwordPresent || isPlaceholderPassword) {
+                throw new IllegalStateException("FATAL: SPRING_MAIL_PASSWORD is missing or set to placeholder in Render Environment Variables");
+            }
+        } else {
+            if (!passwordPresent || isPlaceholderPassword) {
+                log.warning(">>> BREVO SMTP PASSWORD WARNING: Password is missing or set to placeholder text in local environment.");
+            } else if (activeProfilesList.contains("local") && emailService != null) {
+                System.out.println(">>> RUNNING LOCAL PROFILE STANDALONE SMTP TEST...");
+                emailService.sendStandaloneTestEmail("dhanyaande@gmail.com");
+            }
         }
     }
 }
