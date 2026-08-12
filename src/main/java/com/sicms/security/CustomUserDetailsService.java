@@ -2,7 +2,6 @@ package com.sicms.security;
 
 import com.sicms.entity.User;
 import com.sicms.repository.UserRepository;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -19,11 +18,17 @@ public class CustomUserDetailsService implements UserDetailsService {
     }
 
     @Override
-    @Cacheable(value = "users", key = "#email.toLowerCase()")
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = userRepository.findByEmailIgnoreCase(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+        if (email == null || email.isBlank()) {
+            throw new UsernameNotFoundException("Email cannot be empty");
+        }
+
+        String cleanEmail = email.trim().toLowerCase();
+        System.out.println(">>> LOADING USERDETAILS FOR EMAIL: [" + cleanEmail + "]");
+
+        User user = userRepository.findByEmailIgnoreCase(cleanEmail)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + cleanEmail));
 
         return new CustomUserDetails(user);
     }

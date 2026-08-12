@@ -19,13 +19,16 @@ public class EmailService {
 
     private final String apiKey;
     private final String fromAddress;
+    private final String testOwnerEmail;
 
     public EmailService(
             @Value("${resend.api.key:your_resend_api_key_here}") String apiKey,
-            @Value("${app.mail.from:onboarding@resend.dev}") String fromAddress
+            @Value("${app.mail.from:onboarding@resend.dev}") String fromAddress,
+            @Value("${resend.test.owner-email:#{null}}") String testOwnerEmail
     ) {
         this.apiKey = apiKey != null ? apiKey.trim() : "";
         this.fromAddress = (fromAddress != null && !fromAddress.isBlank()) ? fromAddress.trim() : "onboarding@resend.dev";
+        this.testOwnerEmail = (testOwnerEmail != null && !testOwnerEmail.isBlank()) ? testOwnerEmail.trim() : null;
         log.info(">>> RESEND EMAIL SERVICE INITIALIZED with Sender: " + this.fromAddress);
     }
 
@@ -38,7 +41,7 @@ public class EmailService {
     }
 
     public void sendStandaloneTestEmail(String recipient) {
-        String target = (recipient != null && !recipient.isBlank()) ? recipient : "dhanyaande@gmail.com";
+        String target = (recipient != null && !recipient.isBlank()) ? recipient : "admin@sicms.edu";
         sendOtpEmailSync(target, "1234", "TEST");
     }
 
@@ -87,7 +90,7 @@ public class EmailService {
 
         System.out.println("=================================================");
         System.out.println(">>> DISPATCHING RESEND API EMAIL TO: [" + toEmail + "] Purpose: " + purpose);
-        System.out.println(">>> OTP CODE GENERATED: [ " + otpCode + " ]");
+        System.out.println(">>> OTP CODE GENERATED FOR [" + toEmail + "]: [ " + otpCode + " ]");
         System.out.println("=================================================");
 
         try {
@@ -112,15 +115,14 @@ public class EmailService {
         } catch (Exception e) {
             System.err.println(">>> RESEND DISPATCH NOTICE for [" + toEmail + "]: " + e.getMessage());
 
-            // Resend Testing Mode Fallback: Re-route unverified recipients to account owner email
-            if (e.getMessage() != null && (e.getMessage().contains("only send testing emails") || e.getMessage().contains("validation_error") || e.getMessage().contains("403"))) {
-                String ownerEmail = "dhanyaande@gmail.com";
-                System.out.println(">>> RESEND TESTING MODE: Re-routing email for [" + toEmail + "] to verified account [" + ownerEmail + "]...");
+            // Resend Testing Mode Fallback: Re-route unverified recipients to test owner if configured
+            if (testOwnerEmail != null && e.getMessage() != null && (e.getMessage().contains("only send testing emails") || e.getMessage().contains("validation_error") || e.getMessage().contains("403"))) {
+                System.out.println(">>> RESEND TESTING MODE: Re-routing email for [" + toEmail + "] to test owner [" + testOwnerEmail + "]...");
                 try {
                     Resend resend = new Resend(apiKey);
                     CreateEmailOptions fallbackParams = CreateEmailOptions.builder()
                             .from(fromAddress)
-                            .to(ownerEmail)
+                            .to(testOwnerEmail)
                             .subject("[TEST MODE: " + toEmail + "] " + subject)
                             .html(htmlContent)
                             .build();
@@ -128,16 +130,16 @@ public class EmailService {
                     CreateEmailResponse fallbackData = resend.emails().send(fallbackParams);
                     System.out.println("=================================================");
                     System.out.println(">>> 200 RESEND TEST MODE RE-ROUTE SUCCESSFUL!");
-                    System.out.println(">>> DELIVERED TO: [" + ownerEmail + "] for user [" + toEmail + "]");
+                    System.out.println(">>> DELIVERED TO: [" + testOwnerEmail + "] for target [" + toEmail + "]");
                     System.out.println("=================================================");
-                    log.info("Resend API test mode re-routed email to " + ownerEmail);
+                    log.info("Resend API test mode re-routed email to " + testOwnerEmail);
                     return;
                 } catch (Exception fallbackEx) {
                     System.err.println(">>> RESEND RE-ROUTE ERROR: " + fallbackEx.getMessage());
                 }
             }
 
-            log.log(Level.SEVERE, "Resend API dispatch failure: " + e.getMessage(), e);
+            log.log(Level.SEVERE, "Resend API dispatch failure for [" + toEmail + "]: " + e.getMessage(), e);
             throw new RuntimeException("Unable to send OTP email via Resend: " + e.getMessage(), e);
         }
     }

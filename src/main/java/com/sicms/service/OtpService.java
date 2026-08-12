@@ -12,7 +12,6 @@ import com.sicms.exception.AuthException;
 import com.sicms.repository.OtpRepository;
 import com.sicms.repository.UserRepository;
 import com.sicms.security.JwtService;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,28 +22,31 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
+import java.util.HexFormat;
 import java.util.Optional;
+import java.util.logging.Logger;
 
 @Service
 public class OtpService {
 
-    private final UserRepository userRepository;
+    private static final Logger log = Logger.getLogger(OtpService.class.getName());
+
     private final OtpRepository otpRepository;
+    private final UserRepository userRepository;
     private final EmailService emailService;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public OtpService(
-            UserRepository userRepository,
             OtpRepository otpRepository,
+            UserRepository userRepository,
             EmailService emailService,
             JwtService jwtService,
             RefreshTokenService refreshTokenService
     ) {
-        this.userRepository = userRepository;
         this.otpRepository = otpRepository;
+        this.userRepository = userRepository;
         this.emailService = emailService;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
@@ -52,7 +54,14 @@ public class OtpService {
 
     @Transactional
     public void generateAndSendOtp(String email, OtpPurpose purpose) {
+        if (email == null || email.isBlank()) {
+            throw new AuthException("Email cannot be empty for OTP generation.");
+        }
+
         String cleanEmail = email.trim().toLowerCase();
+        System.out.println("=================================================");
+        System.out.println(">>> OTP GENERATED FOR EMAIL: [" + cleanEmail + "] (Purpose: " + purpose + ")");
+        System.out.println("=================================================");
 
         User user = userRepository.findByEmailIgnoreCase(cleanEmail)
                 .orElseThrow(() -> new AuthException("No registered account found with email: " + cleanEmail));
@@ -121,6 +130,11 @@ public class OtpService {
         String accessToken = jwtService.generateAccessToken(savedUser);
         String refreshToken = refreshTokenService.createRefreshToken(savedUser);
 
+        System.out.println("=================================================");
+        System.out.println(">>> JWT GENERATED FOR EMAIL: [" + savedUser.getEmail() + "]");
+        System.out.println(">>> AUTHENTICATED USER EMAIL: [" + savedUser.getEmail() + "] (Role: " + savedUser.getRole().getRoleName() + ")");
+        System.out.println("=================================================");
+
         return new LoginResponse(
                 accessToken,
                 jwtService.getAccessExpirationSeconds(),
@@ -149,18 +163,22 @@ public class OtpService {
         String email = rawEmail.trim().toLowerCase();
         String cleanOtp = rawOtp.trim();
 
+        System.out.println("=================================================");
+        System.out.println(">>> OTP VERIFICATION REQUESTED FOR EMAIL: [" + email + "]");
+        System.out.println("=================================================");
+
         User user = userRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new AuthException("User not found for email: " + email));
 
         OtpVerification verification = otpRepository
                 .findTopByEmailIgnoreCaseAndPurposeAndUsedFalseOrderByCreatedAtDesc(email, expectedPurpose)
-                .orElseThrow(() -> new AuthException("No active OTP request found or OTP already used."));
+                .orElseThrow(() -> new AuthException("No active OTP request found or OTP already used for email: " + email));
 
         // Expiration check (5 minutes)
         if (verification.getExpiresAt().isBefore(Instant.now())) {
             verification.setUsed(true);
             otpRepository.save(verification);
-            throw new AuthException("OTP code has expired. Please request a new OTP.");
+            throw new AuthException("OTP code has expired for email: " + email + ". Please request a new OTP.");
         }
 
         // Maximum attempts check (Max 5 attempts)
@@ -170,7 +188,7 @@ public class OtpService {
         if (currentAttempts > 5) {
             verification.setUsed(true);
             otpRepository.save(verification);
-            throw new AuthException("Maximum verification attempts (5) exceeded. Please request a new OTP.");
+            throw new AuthException("Maximum verification attempts (5) exceeded for email: " + email + ". Please request a new OTP.");
         }
 
         // Verify SHA-256 Hash strictly against database
@@ -186,6 +204,8 @@ public class OtpService {
         verification.setUsed(true);
         otpRepository.save(verification);
 
+        System.out.println(">>> OTP VERIFIED SUCCESSFULLY FOR EMAIL: [" + email + "]");
+
         return user;
     }
 
@@ -194,8 +214,8 @@ public class OtpService {
             return OtpPurpose.LOGIN;
         }
         try {
-            return OtpPurpose.valueOf(purposeStr.toUpperCase());
-        } catch (Exception e) {
+            return OtpPurpose.valueOf(purposeStr.toUpperCase().trim());
+        } catch (IllegalArgumentException e) {
             return OtpPurpose.LOGIN;
         }
     }
@@ -204,19 +224,9 @@ public class OtpService {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(rawOtp.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(hash);
+            return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("Error hashing OTP code", e);
-        }
-    }
-
-    @Scheduled(cron = "0 0 * * * *")
-    @Transactional
-    public void cleanupExpiredOtps() {
-        try {
-            otpRepository.deleteByExpiresAtBefore(Instant.now());
-        } catch (Exception e) {
-            System.err.println("Warning: Unable to clean up expired OTP records: " + e.getMessage());
+            throw new RuntimeException("SHA-256 hashing algorithm not available", e);
         }
     }
 }

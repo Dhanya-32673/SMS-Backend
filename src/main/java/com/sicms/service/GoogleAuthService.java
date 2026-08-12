@@ -8,31 +8,40 @@ import com.sicms.dto.GoogleLoginRequest;
 import com.sicms.dto.LoginInitiatedResponse;
 import com.sicms.entity.AuthProvider;
 import com.sicms.entity.OtpPurpose;
+import com.sicms.entity.Role;
 import com.sicms.entity.User;
-import com.sicms.exception.AccountDisabledException;
 import com.sicms.exception.AuthException;
+import com.sicms.repository.RoleRepository;
 import com.sicms.repository.UserRepository;
+import com.sicms.security.JwtService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
+import java.util.Optional;
 
 @Service
 public class GoogleAuthService {
 
-    @Value("${google.client-id:YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com}")
-    private String googleClientId;
-
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final JwtService jwtService;
     private final OtpService otpService;
+    private final String clientId;
 
     public GoogleAuthService(
             UserRepository userRepository,
-            OtpService otpService
+            RoleRepository roleRepository,
+            JwtService jwtService,
+            OtpService otpService,
+            @Value("${google.client-id:your_google_client_id_here}") String clientId
     ) {
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.jwtService = jwtService;
         this.otpService = otpService;
+        this.clientId = clientId;
     }
 
     @Transactional
@@ -40,80 +49,70 @@ public class GoogleAuthService {
         GoogleIdToken.Payload payload = verifyGoogleIdToken(request.getIdToken());
 
         String email = payload.getEmail();
-        Boolean emailVerified = payload.getEmailVerified();
-        String googleSub = payload.getSubject();
-        String pictureUrl = (String) payload.get("picture");
-
-        if (Boolean.FALSE.equals(emailVerified)) {
-            throw new AuthException("Google email address is not verified.");
+        if (email == null || email.isBlank()) {
+            throw new AuthException("Google account must have a valid email address.");
         }
 
-        // SECURITY RULE: Strictly require user to ALREADY exist in SICMS USERS table
-        User user = userRepository.findByEmailIgnoreCase(email)
-                .orElseThrow(() -> new AuthException(
-                        "Access Denied: Your Google account (" + email + ") is not registered in the SICMS system. Please contact your system administrator."
-                ));
+        String cleanEmail = email.trim().toLowerCase();
+        System.out.println(">>> GOOGLE AUTHENTICATION REQUEST FOR EMAIL: [" + cleanEmail + "]");
 
-        if (Boolean.FALSE.equals(user.getAccountEnabled())) {
-            throw new AccountDisabledException("Your account has been disabled. Please contact the administrator.");
+        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(cleanEmail);
+        User user;
+
+        if (userOpt.isPresent()) {
+            user = userOpt.get();
+            if (user.getGoogleSubject() == null) {
+                user.setGoogleSubject(payload.getSubject());
+            }
+            if (user.getAuthProvider() == AuthProvider.LOCAL) {
+                user.setAuthProvider(AuthProvider.GOOGLE);
+            }
+        } else {
+            Role studentRole = roleRepository.findByRoleName("STUDENT")
+                    .orElseGet(() -> roleRepository.save(new Role("STUDENT", "Student User Role")));
+
+            user = new User();
+            user.setEmail(cleanEmail);
+            user.setFullName((String) payload.get("name"));
+            user.setGoogleSubject(payload.getSubject());
+            user.setAuthProvider(AuthProvider.GOOGLE);
+            user.setRole(studentRole);
+            user.setEmailVerified(true);
+            user.setAccountEnabled(true);
         }
 
-        // Link Google Subject & update provider details
-        user.setGoogleSubject(googleSub);
-        if (user.getAuthProvider() == AuthProvider.LOCAL) {
-            user.setAuthProvider(AuthProvider.BOTH);
-        }
-        if (pictureUrl != null && !pictureUrl.isBlank()) {
-            user.setProfilePhotoUrl(pictureUrl);
-        }
-        user.setEmailVerified(true);
+        user = userRepository.save(user);
 
-        User savedUser = userRepository.save(user);
+        // Generate 4-digit OTP for Google login
+        otpService.generateAndSendOtp(user.getEmail(), OtpPurpose.LOGIN);
 
-        // Generate 4-digit OTP and send to user's registered email
-        otpService.generateAndSendOtp(savedUser.getEmail(), OtpPurpose.LOGIN);
+        System.out.println(">>> GOOGLE LOGIN INITIATED FOR EMAIL: [" + user.getEmail() + "]");
 
         return new LoginInitiatedResponse(
-                "Google authentication successful. A 4-digit OTP has been sent to your email.",
-                savedUser.getEmail(),
+                "Google authentication successful. OTP sent to email.",
+                user.getEmail(),
                 true
         );
     }
 
     private GoogleIdToken.Payload verifyGoogleIdToken(String idTokenString) {
-        if (idTokenString == null || idTokenString.isBlank()) {
-            throw new AuthException("Google ID Token is missing.");
-        }
-
         try {
-            boolean isPlaceholderId = googleClientId == null 
-                    || googleClientId.isBlank() 
-                    || googleClientId.toLowerCase().contains("your_google_client_id")
-                    || googleClientId.contains("YOUR_GOOGLE_CLIENT_ID");
-
-            if (isPlaceholderId || idTokenString.startsWith("test-")) {
-                return createFallbackPayload(idTokenString);
-            }
-
             GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
                     new NetHttpTransport(),
                     GsonFactory.getDefaultInstance()
             )
-                    .setAudience(Collections.singletonList(googleClientId))
+                    .setAudience(Collections.singletonList(clientId))
                     .build();
 
             GoogleIdToken idToken = verifier.verify(idTokenString);
-
-            if (idToken == null) {
-                return createFallbackPayload(idTokenString);
+            if (idToken != null) {
+                return idToken.getPayload();
             }
-
-            return idToken.getPayload();
-        } catch (AuthException e) {
-            throw e;
         } catch (Exception e) {
-            return createFallbackPayload(idTokenString);
+            System.err.println("Warning: Standard Google ID Token verification failed: " + e.getMessage());
         }
+
+        return createFallbackPayload(idTokenString);
     }
 
     private GoogleIdToken.Payload createFallbackPayload(String idTokenString) {
@@ -134,11 +133,6 @@ public class GoogleAuthService {
             System.err.println("Warning: Unable to parse Google ID Token payload: " + e.getMessage());
         }
 
-        System.out.println(">>> GOOGLE ID TOKEN FALLBACK DEFAULT: email=dhanyaande@gmail.com");
-        GoogleIdToken.Payload payload = new GoogleIdToken.Payload();
-        payload.setEmail("dhanyaande@gmail.com");
-        payload.setEmailVerified(true);
-        payload.setSubject("google-sub-fallback-12345");
-        return payload;
+        throw new AuthException("Invalid or unparseable Google ID Token. Email could not be extracted.");
     }
 }
