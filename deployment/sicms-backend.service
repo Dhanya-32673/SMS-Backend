@@ -1,0 +1,15 @@
+[Unit]
+Description=SICMS Spring Boot Backend Service
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/sicms-backend
+ExecStart=/usr/bin/java -jar /opt/sicms-backend/app.jar
+SuccessExitStatus=143
+Restart=always
+RestartSec=10
+EnvironmentFile=/opt/sicms-backend/.env
+
+[Install]
+WantedBy=multi-user.target

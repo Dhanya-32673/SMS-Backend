@@ -1,0 +1,37 @@
+# Target & Compiled Build Outputs
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.rar
+
+# Environment & Credentials
+.env
+.env.*
+application-local.properties
+application-dev.properties
+
+# Logs & Temp files
+*.log
+backend-startup.log
+startup.log
+tmp/
+temp/
+scratch/
+uploads/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Maven Wrapper binaries
+.mvn/wrapper/maven-wrapper.jar

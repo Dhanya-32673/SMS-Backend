@@ -1,0 +1,693 @@
+{
+	"info": {
+		"_postman_id": "sicms-part1-full-30-tests",
+		"name": "SICMS Part 1 - Complete 30 Postman Tests",
+		"description": "Full Postman collection containing all 30 authentication, authorization, JWT, OTP, Google Auth, and RBAC test scenarios for College Student Information & Certificate Management System (SICMS).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "01 - Email Password Auth",
+			"item": [
+				{
+					"name": "Test 01: Correct Admin Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"password\": \"AdminPass123!\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/login",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Test 02: Correct Faculty Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"faculty@college.edu\",\n    \"password\": \"FacultyPass123!\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/login",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Test 03: Wrong Password (401)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"password\": \"WrongPassword123\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/login",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Test 04: Unknown Email (401)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"unknown@college.edu\",\n    \"password\": \"AdminPass123!\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/login",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Test 05: Disabled Account (403)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"disabled@college.edu\",\n    \"password\": \"DisabledPass123!\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/login",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Test 18: Login with New Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"password\": \"NewAdminPass123!\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/login",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "login"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "02 - Google OAuth Auth",
+			"item": [
+				{
+					"name": "Test 06: Google Login Registered Admin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"idToken\": \"<GOOGLE_ID_TOKEN_ADMIN>\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/google",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "google"]
+						}
+					}
+				},
+				{
+					"name": "Test 07: Google Login Registered Faculty",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"idToken\": \"<GOOGLE_ID_TOKEN_FACULTY>\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/google",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "google"]
+						}
+					}
+				},
+				{
+					"name": "Test 08: Google Login Unknown Account (Denied)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"idToken\": \"<GOOGLE_ID_TOKEN_UNKNOWN>\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/google",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "google"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "03 - OTP Authentication",
+			"item": [
+				{
+					"name": "Test 09: Send Login OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"purpose\": \"LOGIN\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/otp/send",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "otp", "send"]
+						}
+					}
+				},
+				{
+					"name": "Test 10: Verify Correct OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"otp\": \"123456\",\n    \"purpose\": \"LOGIN\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/otp/verify",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "otp", "verify"]
+						}
+					}
+				},
+				{
+					"name": "Test 11: Wrong OTP (400)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"otp\": \"000000\",\n    \"purpose\": \"LOGIN\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/otp/verify",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "otp", "verify"]
+						}
+					}
+				},
+				{
+					"name": "Test 12: Expired OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"otp\": \"123456\",\n    \"purpose\": \"LOGIN\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/otp/verify",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "otp", "verify"]
+						}
+					}
+				},
+				{
+					"name": "Test 13: Reuse OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"otp\": \"123456\",\n    \"purpose\": \"LOGIN\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/otp/verify",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "otp", "verify"]
+						}
+					}
+				},
+				{
+					"name": "Test 14: OTP Max Attempt Limit",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"otp\": \"999999\",\n    \"purpose\": \"LOGIN\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/otp/verify",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "otp", "verify"]
+						}
+					}
+				},
+				{
+					"name": "Test 15: OTP Resend Cooldown",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"purpose\": \"LOGIN\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/otp/send",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "otp", "send"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "04 - Forgot & Reset Password",
+			"item": [
+				{
+					"name": "Test 16: Forgot Password Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/forgot-password",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "forgot-password"]
+						}
+					}
+				},
+				{
+					"name": "Test 17: Password Reset Execute",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@college.edu\",\n    \"otp\": \"123456\",\n    \"newPassword\": \"NewAdminPass123!\",\n    \"confirmPassword\": \"NewAdminPass123!\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/reset-password",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "reset-password"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "05 - JWT & Session Security",
+			"item": [
+				{
+					"name": "Test 19: Access Protected Endpoint with JWT",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ADMIN_ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/admin/test",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "admin", "test"]
+						}
+					}
+				},
+				{
+					"name": "Test 20: Access Endpoint Without JWT (401)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/admin/test",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "admin", "test"]
+						}
+					}
+				},
+				{
+					"name": "Test 21: Expired Access Token (401)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer EXPIRED_JWT_TOKEN"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/admin/test",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "admin", "test"]
+						}
+					}
+				},
+				{
+					"name": "Test 22: Valid Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refreshToken\": \"{{VALID_REFRESH_TOKEN}}\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/refresh",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "refresh"]
+						}
+					}
+				},
+				{
+					"name": "Test 23: Expired Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refreshToken\": \"EXPIRED_REFRESH_TOKEN\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/refresh",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "refresh"]
+						}
+					}
+				},
+				{
+					"name": "Test 24: Revoked Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refreshToken\": \"REVOKED_REFRESH_TOKEN\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/refresh",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "refresh"]
+						}
+					}
+				},
+				{
+					"name": "Test 25: Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refreshToken\": \"{{VALID_REFRESH_TOKEN}}\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/auth/logout",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "logout"]
+						}
+					}
+				},
+				{
+					"name": "Test 29: Invalid JWT (401)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer INVALID_FORMAT_JWT"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/auth/me",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "me"]
+						}
+					}
+				},
+				{
+					"name": "Test 30: GET Current User /me",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ADMIN_ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/auth/me",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "auth", "me"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "06 - Role Based Access Control RBAC",
+			"item": [
+				{
+					"name": "Test 26: Admin Accessing Admin API (200)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ADMIN_ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/admin/test",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "admin", "test"]
+						}
+					}
+				},
+				{
+					"name": "Test 27: Faculty Accessing Faculty API (200)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{FACULTY_ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/faculty/test",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "faculty", "test"]
+						}
+					}
+				},
+				{
+					"name": "Test 28: Faculty Accessing Admin API (403 Forbidden)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{FACULTY_ACCESS_TOKEN}}"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/admin/test",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api", "admin", "test"]
+						}
+					}
+				}
+			]
+		}
+	]
+}
