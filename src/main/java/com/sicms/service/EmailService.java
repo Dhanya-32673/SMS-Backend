@@ -10,6 +10,10 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Properties;
@@ -81,7 +85,7 @@ public class EmailService {
     }
 
     /**
-     * Performs a non-intrusive SMTP authentication test on startup with Port 465 SSL fallback.
+     * Performs a non-intrusive SMTP authentication test on startup with Brevo REST API fallback.
      */
     public void testSmtpAuthOnStartup() {
         if (mailSender instanceof JavaMailSenderImpl mailSenderImpl) {
@@ -90,26 +94,8 @@ public class EmailService {
                 System.out.println(">>> BREVO SMTP AUTH SUCCESS: Authenticated successfully with " + host + ":" + port);
                 log.info("BREVO SMTP AUTH SUCCESS");
             } catch (Exception e) {
-                System.err.println(">>> BREVO SMTP AUTH WARNING (" + host + ":" + port + "): " + e.getMessage());
-                // If Port 587 timed out on Render due to firewall blocking, attempt fallback to Port 465 SSL
-                if (port == 587 && e.getMessage() != null && e.getMessage().contains("Couldn't connect")) {
-                    System.out.println(">>> ATTEMPTING AUTOMATIC FALLBACK TO BREVO PORT 465 SSL...");
-                    try {
-                        mailSenderImpl.setPort(465);
-                        Properties props = mailSenderImpl.getJavaMailProperties();
-                        props.put("mail.smtp.ssl.enable", "true");
-                        props.put("mail.smtp.starttls.enable", "false");
-                        mailSenderImpl.testConnection();
-                        this.port = 465;
-                        this.sslEnable = true;
-                        this.starttlsEnable = false;
-                        System.out.println(">>> BREVO SMTP PORT 465 SSL FALLBACK SUCCESSFUL!");
-                        log.info("BREVO SMTP PORT 465 SSL FALLBACK SUCCESSFUL");
-                    } catch (Exception ex) {
-                        System.err.println(">>> BREVO SMTP PORT 465 FALLBACK FAILED: " + ex.getMessage());
-                        log.warning("BREVO SMTP PORT 465 FALLBACK FAILED: " + ex.getMessage());
-                    }
-                }
+                System.err.println(">>> BREVO SMTP AUTH NOTICE (" + host + ":" + port + "): " + e.getMessage());
+                System.out.println(">>> BREVO DUAL DISPATCH SYSTEM ACTIVE: HTTPS REST API Fallback Ready (Port 443)");
             }
         }
     }
@@ -118,19 +104,26 @@ public class EmailService {
      * Standalone simple email test method for verification.
      */
     public void sendStandaloneTestEmail(String recipient) {
+        String target = (recipient != null && !recipient.isBlank()) ? recipient : "dhanyaande@gmail.com";
+        String subject = "Brevo SMTP & API Test";
+        String body = "<p>SMTP & API test message from SICMS System.</p>";
+
         try {
             SimpleMailMessage msg = new SimpleMailMessage();
-            msg.setTo(recipient != null && !recipient.isBlank() ? recipient : "dhanyaande@gmail.com");
-            msg.setSubject("Brevo SMTP Test");
-            msg.setText("SMTP test message");
+            msg.setTo(target);
+            msg.setSubject(subject);
+            msg.setText("SMTP test message from SICMS System.");
             msg.setFrom(fromEmail);
 
             mailSender.send(msg);
-            System.out.println(">>> MAIL SENT SUCCESSFULLY TO: " + msg.getTo()[0]);
-            log.info("Brevo standalone test mail sent successfully to " + msg.getTo()[0]);
+            System.out.println(">>> MAIL SENT SUCCESSFULLY VIA SMTP TO: " + target);
+            log.info("Brevo standalone test mail sent successfully to " + target);
         } catch (Exception e) {
-            System.err.println(">>> BREVO STANDALONE MAIL TEST ERROR: " + e.getMessage());
-            log.warning("Brevo standalone test mail failed: " + e.getMessage());
+            System.err.println(">>> BREVO SMTP DIRECT DISPATCH FAILED: " + e.getMessage() + ". Retrying via Brevo HTTPS REST API (Port 443)...");
+            boolean restSuccess = sendViaBrevoRestApi(target, subject, body);
+            if (!restSuccess) {
+                log.warning("Brevo standalone test mail failed on both SMTP and REST API: " + e.getMessage());
+            }
         }
     }
 
@@ -147,7 +140,7 @@ public class EmailService {
         try {
             sendOtpEmailSync(toEmail, otpCode, purpose);
         } catch (Exception e) {
-            log.log(Level.WARNING, ">>> BREVO SMTP WARNING: Outbound mail dispatch notice: " + e.getMessage());
+            log.log(Level.WARNING, ">>> BREVO DUAL DISPATCH NOTICE: " + e.getMessage());
             System.err.println(">>> BREVO WARNING: " + e.getMessage());
             System.out.println(">>> OTP DISPATCH CODE FOR [" + toEmail + "]: [ " + otpCode + " ]");
         }
@@ -182,11 +175,18 @@ public class EmailService {
             """, otpCode, otpCode);
 
         System.out.println("=================================================");
-        System.out.println(">>> SMTP CONNECTION STARTED: " + host + ":" + port + " (STARTTLS=" + starttlsEnable + ", SSL=" + sslEnable + ")");
         System.out.println(">>> DISPATCHING OTP EMAIL TO: [" + toEmail + "] Purpose: " + purpose);
         System.out.println(">>> OTP CODE GENERATED: [ " + otpCode + " ]");
         System.out.println("=================================================");
 
+        // Try primary Brevo HTTPS REST API first (Port 443 - 100% unblocked on Render)
+        boolean restSuccess = sendViaBrevoRestApi(toEmail, subject, htmlContent);
+        if (restSuccess) {
+            return;
+        }
+
+        // Secondary fallback to JavaMail SMTP Socket
+        System.out.println(">>> RETRYING VIA SMTP SOCKET: " + host + ":" + port);
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -196,43 +196,78 @@ public class EmailService {
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
-            System.out.println(">>> 235 Authentication successful");
+            System.out.println(">>> 235 Authentication successful (via SMTP Socket)");
             System.out.println(">>> MAIL SENT SUCCESSFULLY TO: [" + toEmail + "]");
-            log.info("OTP email sent successfully to " + toEmail);
+            log.info("OTP email sent successfully to " + toEmail + " via SMTP Socket");
         } catch (Exception ex) {
             log.log(Level.SEVERE, "SMTP AUTHENTICATION OR DISPATCH FAILURE: " + ex.getMessage(), ex);
             System.err.println(">>> BREVO SMTP AUTHENTICATION/DISPATCH ERROR: " + ex.getMessage());
-
-            // If Port 587 timed out on Render during send, try fallback to Port 465 SSL
-            if (mailSender instanceof JavaMailSenderImpl mailSenderImpl && port == 587 && ex.getMessage() != null && ex.getMessage().contains("Couldn't connect")) {
-                System.out.println(">>> RETRYING DISPATCH WITH BREVO PORT 465 SSL FALLBACK...");
-                try {
-                    mailSenderImpl.setPort(465);
-                    Properties props = mailSenderImpl.getJavaMailProperties();
-                    props.put("mail.smtp.ssl.enable", "true");
-                    props.put("mail.smtp.starttls.enable", "false");
-
-                    MimeMessage message = mailSenderImpl.createMimeMessage();
-                    MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-                    helper.setFrom(fromEmail);
-                    helper.setTo(toEmail);
-                    helper.setSubject(subject);
-                    helper.setText(htmlContent, true);
-
-                    mailSenderImpl.send(message);
-                    this.port = 465;
-                    this.sslEnable = true;
-                    this.starttlsEnable = false;
-                    System.out.println(">>> 235 Authentication successful (via Port 465 SSL Fallback)");
-                    System.out.println(">>> MAIL SENT SUCCESSFULLY TO: [" + toEmail + "]");
-                    log.info("OTP email sent successfully to " + toEmail + " via Port 465 SSL Fallback");
-                    return;
-                } catch (Exception retryEx) {
-                    System.err.println(">>> PORT 465 RETRY ALSO FAILED: " + retryEx.getMessage());
-                }
-            }
-
             throw new RuntimeException("Unable to send OTP email: " + ex.getMessage(), ex);
         }
+    }
+
+    /**
+     * Dispatches transactional email via Brevo's HTTPS REST API (v3) over Port 443.
+     * This bypasses cloud hosting SMTP port blocks (587 & 465) completely.
+     */
+    private boolean sendViaBrevoRestApi(String toEmail, String subject, String htmlContent) {
+        try {
+            String apiKey = password != null ? password.trim() : "";
+            if (apiKey.isEmpty() || apiKey.contains("your_brevo_password_here")) {
+                log.warning(">>> BREVO REST API CANNOT DISPATCH: Missing active API key in SPRING_MAIL_PASSWORD");
+                return false;
+            }
+
+            String escapedFrom = escapeJson(fromEmail);
+            String escapedTo = escapeJson(toEmail);
+            String escapedSubject = escapeJson(subject);
+            String escapedHtml = escapeJson(htmlContent);
+
+            String jsonPayload = "{\n" +
+                    "  \"sender\": {\"name\": \"SICMS Administration\", \"email\": \"" + escapedFrom + "\"},\n" +
+                    "  \"to\": [{\"email\": \"" + escapedTo + "\"}],\n" +
+                    "  \"subject\": \"" + escapedSubject + "\",\n" +
+                    "  \"htmlContent\": \"" + escapedHtml + "\"\n" +
+                    "}";
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.brevo.com/v3/smtp/email"))
+                    .header("accept", "application/json")
+                    .header("api-key", apiKey)
+                    .header("content-type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            HttpResponse<String> response = client.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                System.out.println("=================================================");
+                System.out.println(">>> 200 BREVO HTTPS REST API DISPATCH SUCCESSFUL!");
+                System.out.println(">>> MAIL SENT TO: [" + toEmail + "] via Brevo API (Port 443)");
+                System.out.println("=================================================");
+                log.info("Brevo HTTPS REST API email dispatch successful to " + toEmail);
+                return true;
+            } else {
+                System.err.println(">>> BREVO HTTPS REST API FAILURE (Status " + response.statusCode() + "): " + response.body());
+                log.warning("Brevo HTTPS REST API failure: " + response.body());
+                return false;
+            }
+        } catch (Exception e) {
+            System.err.println(">>> BREVO HTTPS REST API ERROR: " + e.getMessage());
+            log.warning("Brevo HTTPS REST API exception: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private String escapeJson(String raw) {
+        if (raw == null) return "";
+        return raw.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\b", "\\b")
+                .replace("\f", "\\f")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 }
