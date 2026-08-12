@@ -11,11 +11,23 @@ import java.util.Optional;
 
 public interface FacultyRepository extends JpaRepository<Faculty, Long> {
 
-    Optional<Faculty> findByFacultyId(String facultyId);
+    Optional<Faculty> findFirstByFacultyIdOrderByIdAsc(String facultyId);
 
-    Optional<Faculty> findByUserId(Long userId);
+    default Optional<Faculty> findByFacultyId(String facultyId) {
+        return findFirstByFacultyIdOrderByIdAsc(facultyId);
+    }
 
-    Optional<Faculty> findByEmail(String email);
+    Optional<Faculty> findFirstByUserIdOrderByIdAsc(Long userId);
+
+    default Optional<Faculty> findByUserId(Long userId) {
+        return findFirstByUserIdOrderByIdAsc(userId);
+    }
+
+    Optional<Faculty> findFirstByEmailOrderByIdAsc(String email);
+
+    default Optional<Faculty> findByEmail(String email) {
+        return findFirstByEmailOrderByIdAsc(email);
+    }
 
     boolean existsByFacultyId(String facultyId);
 
