@@ -3,6 +3,7 @@ package com.sicms.service;
 import jakarta.annotation.PostConstruct;
 import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -29,6 +30,9 @@ public class EmailService {
 
     @Value("${spring.mail.username}")
     private String username;
+
+    @Value("${spring.mail.password:}")
+    private String password;
 
     @Value("${app.mail.from}")
     private String fromEmail;
@@ -59,6 +63,11 @@ public class EmailService {
         System.out.println("SSL Enabled   : " + sslEnable);
         System.out.println("============================================");
 
+        // Password Validation Check
+        if (password == null || password.isBlank() || password.contains("your_brevo_password_here")) {
+            log.warning(">>> BREVO KEY WARNING: spring.mail.password is unconfigured or set to placeholder text. Ensure SPRING_MAIL_PASSWORD is set in .env file.");
+        }
+
         // Sender Email Verification Check
         if (fromEmail == null || fromEmail.isBlank() || !fromEmail.contains("@")) {
             log.warning(">>> BREVO SENDER VERIFICATION WARNING: app.mail.from (" + fromEmail + ") is unconfigured or invalid. Verify sender in Brevo -> Senders & Domains -> Senders.");
@@ -66,7 +75,7 @@ public class EmailService {
             System.out.println(">>> BREVO SENDER IDENTITY VERIFIED: " + fromEmail);
         }
 
-        // Startup SMTP Test (Connect without sending email)
+        // Startup SMTP Connection Test
         testSmtpAuthOnStartup();
     }
 
@@ -83,6 +92,26 @@ public class EmailService {
                 System.err.println(">>> BREVO SMTP AUTH FAILED: " + e.getMessage());
                 log.warning("BREVO SMTP AUTH FAILED: " + e.getMessage() + " — Check Brevo Dashboard -> Transactional -> SMTP & API -> SMTP Keys.");
             }
+        }
+    }
+
+    /**
+     * Standalone simple email test method for local development verification.
+     */
+    public void sendStandaloneTestEmail(String recipient) {
+        try {
+            SimpleMailMessage msg = new SimpleMailMessage();
+            msg.setTo(recipient != null && !recipient.isBlank() ? recipient : "dhanyaande@gmail.com");
+            msg.setSubject("Brevo Localhost Test");
+            msg.setText("SMTP test from localhost");
+            msg.setFrom(fromEmail);
+
+            mailSender.send(msg);
+            System.out.println(">>> MAIL SENT SUCCESSFULLY TO: " + msg.getTo()[0]);
+            log.info("Brevo standalone test mail sent successfully to " + msg.getTo()[0]);
+        } catch (Exception e) {
+            System.err.println(">>> BREVO STANDALONE MAIL TEST ERROR: " + e.getMessage());
+            log.warning("Brevo standalone test mail failed: " + e.getMessage());
         }
     }
 
@@ -167,8 +196,8 @@ public class EmailService {
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
-            System.out.println(">>> BREVO SMTP AUTHENTICATION SUCCEEDED!");
-            System.out.println(">>> EMAIL SENT SUCCESSFULLY TO: [" + toEmail + "]");
+            System.out.println(">>> 235 Authentication successful");
+            System.out.println(">>> MAIL SENT SUCCESSFULLY TO: [" + toEmail + "]");
             log.info("OTP email sent successfully to " + toEmail);
         } catch (Exception ex) {
             log.log(Level.SEVERE, "SMTP AUTHENTICATION OR DISPATCH FAILURE: " + ex.getMessage(), ex);
