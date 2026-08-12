@@ -23,6 +23,7 @@ public class CorsConfig {
         configuration.setAllowedOriginPatterns(Arrays.asList(
                 "http://localhost:*",
                 "http://127.0.0.1:*",
+                "https://bhashyamgnt.vercel.app",
                 "https://*.vercel.app",
                 "https://*.onrender.com",
                 "https://*.supabase.co"
