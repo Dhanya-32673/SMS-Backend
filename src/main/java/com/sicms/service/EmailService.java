@@ -32,6 +32,15 @@ public class EmailService {
     @Value("${app.mail.from}")
     private String fromEmail;
 
+    @Value("${spring.mail.properties.mail.smtp.auth:true}")
+    private boolean smtpAuth;
+
+    @Value("${spring.mail.properties.mail.smtp.starttls.enable:true}")
+    private boolean starttlsEnable;
+
+    @Value("${spring.mail.properties.mail.smtp.ssl.enable:false}")
+    private boolean sslEnable;
+
     public EmailService(JavaMailSender mailSender) {
         this.mailSender = mailSender;
     }
@@ -39,11 +48,14 @@ public class EmailService {
     @PostConstruct
     public void logMailConfig() {
         System.out.println("============================================");
-        System.out.println("MAIL CONFIG LOADED SUCCESSFULLY");
+        System.out.println("BREVO SMTP DIAGNOSTICS LOADED");
         System.out.println("SMTP Host     : " + host);
         System.out.println("SMTP Port     : " + port);
         System.out.println("SMTP Username : " + username);
         System.out.println("From Address  : " + fromEmail);
+        System.out.println("SMTP Auth     : " + smtpAuth);
+        System.out.println("STARTTLS      : " + starttlsEnable);
+        System.out.println("SSL Enabled   : " + sslEnable);
         System.out.println("============================================");
     }
 
@@ -109,7 +121,8 @@ public class EmailService {
             """, otpCode, otpCode);
 
         System.out.println("=================================================");
-        System.out.println(">>> DISPATCHING BREVO OTP EMAIL TO: [" + toEmail + "] Purpose: " + purpose);
+        System.out.println(">>> CONNECTING TO BREVO SMTP SERVER: " + host + ":" + port + " (STARTTLS=" + starttlsEnable + ", SSL=" + sslEnable + ")");
+        System.out.println(">>> DISPATCHING OTP EMAIL TO: [" + toEmail + "] Purpose: " + purpose);
         System.out.println(">>> OTP CODE GENERATED: [ " + otpCode + " ]");
         System.out.println("=================================================");
 
@@ -125,7 +138,7 @@ public class EmailService {
             log.info("OTP email sent successfully to " + toEmail);
             System.out.println(">>> BREVO SMTP CONNECTION SUCCESS: OTP EMAIL SENT TO: [" + toEmail + "]");
         } catch (Exception ex) {
-            log.log(Level.SEVERE, "Failed to send OTP email", ex);
+            log.log(Level.SEVERE, "Failed to send OTP email via Brevo SMTP", ex);
             System.err.println(">>> BREVO SMTP ERROR: " + ex.getMessage());
             throw new RuntimeException("Unable to send OTP email: " + ex.getMessage(), ex);
         }
