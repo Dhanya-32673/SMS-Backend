@@ -12,8 +12,8 @@ import java.util.Arrays;
 @Configuration
 public class CorsConfig {
 
-    @Value("${FRONTEND_URL:http://localhost:5173}")
-    private String frontendUrl;
+    @Value("${cors.allowed.origins:${FRONTEND_URL:http://localhost:5173}}")
+    private String allowedOrigins;
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
