@@ -10,7 +10,6 @@ import com.sicms.service.GoogleAuthService;
 import com.sicms.service.OtpService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 

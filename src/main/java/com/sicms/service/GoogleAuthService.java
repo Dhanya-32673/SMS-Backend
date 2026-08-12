@@ -13,7 +13,6 @@ import com.sicms.entity.User;
 import com.sicms.exception.AuthException;
 import com.sicms.repository.RoleRepository;
 import com.sicms.repository.UserRepository;
-import com.sicms.security.JwtService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,20 +25,17 @@ public class GoogleAuthService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final JwtService jwtService;
     private final OtpService otpService;
     private final String clientId;
 
     public GoogleAuthService(
             UserRepository userRepository,
             RoleRepository roleRepository,
-            JwtService jwtService,
             OtpService otpService,
             @Value("${google.client-id:your_google_client_id_here}") String clientId
     ) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
-        this.jwtService = jwtService;
         this.otpService = otpService;
         this.clientId = clientId;
     }

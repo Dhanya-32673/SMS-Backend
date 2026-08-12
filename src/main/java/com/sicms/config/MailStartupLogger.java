@@ -1,7 +1,5 @@
 package com.sicms.config;
 
-import com.sicms.service.EmailService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.env.Environment;
@@ -29,9 +27,6 @@ public class MailStartupLogger implements CommandLineRunner {
 
     @Value("${app.mail.from:onboarding@resend.dev}")
     private String mailFrom;
-
-    @Autowired(required = false)
-    private EmailService emailService;
 
     public MailStartupLogger(Environment env) {
         this.env = env;

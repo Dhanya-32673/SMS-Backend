@@ -24,12 +24,8 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.Optional;
-import java.util.logging.Logger;
-
 @Service
 public class OtpService {
-
-    private static final Logger log = Logger.getLogger(OtpService.class.getName());
 
     private final OtpRepository otpRepository;
     private final UserRepository userRepository;
