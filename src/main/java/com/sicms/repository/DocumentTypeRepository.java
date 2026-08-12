@@ -11,7 +11,11 @@ import java.util.Optional;
 @Repository
 public interface DocumentTypeRepository extends JpaRepository<DocumentType, Long> {
 
-    Optional<DocumentType> findByCodeIgnoreCase(String code);
+    Optional<DocumentType> findFirstByCodeIgnoreCaseOrderByIdAsc(String code);
+
+    default Optional<DocumentType> findByCodeIgnoreCase(String code) {
+        return findFirstByCodeIgnoreCaseOrderByIdAsc(code);
+    }
 
     boolean existsByCodeIgnoreCase(String code);
 

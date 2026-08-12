@@ -8,5 +8,9 @@ import java.util.Optional;
 
 @Repository
 public interface StudentAcademicRepository extends JpaRepository<StudentAcademicDetail, Long> {
-    Optional<StudentAcademicDetail> findByStudentId(Long studentId);
+    Optional<StudentAcademicDetail> findFirstByStudentIdOrderByIdAsc(Long studentId);
+
+    default Optional<StudentAcademicDetail> findByStudentId(Long studentId) {
+        return findFirstByStudentIdOrderByIdAsc(studentId);
+    }
 }

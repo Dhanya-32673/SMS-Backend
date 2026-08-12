@@ -16,7 +16,11 @@ import com.sicms.entity.StudentStatus;
 @Repository
 public interface StudentRepository extends JpaRepository<Student, Long> {
 
-    Optional<Student> findByStudentId(String studentId);
+    Optional<Student> findFirstByStudentIdOrderByIdAsc(String studentId);
+
+    default Optional<Student> findByStudentId(String studentId) {
+        return findFirstByStudentIdOrderByIdAsc(studentId);
+    }
 
     Optional<Student> findByRollNumberIgnoreCase(String rollNumber);
 

@@ -21,12 +21,25 @@ public interface StudentDocumentRepository extends JpaRepository<StudentDocument
 
         List<StudentDocument> findByStudent_StudentId(String studentId);
 
-        Optional<StudentDocument> findByStudentIdAndDocumentTypeId(Long studentId, Long documentTypeId);
+        Optional<StudentDocument> findFirstByStudentIdAndDocumentTypeIdOrderByIdDesc(Long studentId, Long documentTypeId);
 
-        Optional<StudentDocument> findByStudent_StudentIdAndDocumentType_IdAndStatusNot(String studentId,
+        default Optional<StudentDocument> findByStudentIdAndDocumentTypeId(Long studentId, Long documentTypeId) {
+            return findFirstByStudentIdAndDocumentTypeIdOrderByIdDesc(studentId, documentTypeId);
+        }
+
+        Optional<StudentDocument> findFirstByStudent_StudentIdAndDocumentType_IdAndStatusNotOrderByIdDesc(String studentId,
                         Long documentTypeId, DocumentStatus status);
 
-        Optional<StudentDocument> findByStudent_StudentIdAndDocumentType_CodeIgnoreCase(String studentId, String code);
+        default Optional<StudentDocument> findByStudent_StudentIdAndDocumentType_IdAndStatusNot(String studentId,
+                        Long documentTypeId, DocumentStatus status) {
+            return findFirstByStudent_StudentIdAndDocumentType_IdAndStatusNotOrderByIdDesc(studentId, documentTypeId, status);
+        }
+
+        Optional<StudentDocument> findFirstByStudent_StudentIdAndDocumentType_CodeIgnoreCaseOrderByIdDesc(String studentId, String code);
+
+        default Optional<StudentDocument> findByStudent_StudentIdAndDocumentType_CodeIgnoreCase(String studentId, String code) {
+            return findFirstByStudent_StudentIdAndDocumentType_CodeIgnoreCaseOrderByIdDesc(studentId, code);
+        }
 
         List<StudentDocument> findByStatusIn(java.util.Collection<DocumentStatus> statuses);
 
