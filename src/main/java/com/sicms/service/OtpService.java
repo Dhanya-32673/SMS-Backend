@@ -60,7 +60,7 @@ public class OtpService {
 
         String cleanEmail = email.trim().toLowerCase();
         System.out.println("=================================================");
-        System.out.println(">>> OTP GENERATED FOR EMAIL: [" + cleanEmail + "] (Purpose: " + purpose + ")");
+        System.out.println(">>> RESEND REQUESTED FOR EMAIL: [" + cleanEmail + "] (Purpose: " + purpose + ")");
         System.out.println("=================================================");
 
         User user = userRepository.findByEmailIgnoreCase(cleanEmail)
@@ -110,12 +110,17 @@ public class OtpService {
 
         otpRepository.save(verification);
 
-        // Dispatch OTP via Email
+        System.out.println(">>> OTP GENERATED FOR EMAIL: [" + cleanEmail + "]");
+
+        // Dispatch OTP via Email directly to user.getEmail()
         emailService.sendOtpEmail(user.getEmail(), rawOtp, purpose.name());
     }
 
     @Transactional
     public void generateAndSendOtp(OtpSendRequest request) {
+        if (request == null || request.getEmail() == null || request.getEmail().isBlank()) {
+            throw new AuthException("Email is required for sending OTP.");
+        }
         OtpPurpose purpose = parsePurpose(request.getPurpose());
         generateAndSendOtp(request.getEmail(), purpose);
     }

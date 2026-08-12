@@ -53,6 +53,9 @@ public class AuthController {
 
     @PostMapping({ "/send-login-otp", "/resend-otp", "/otp/resend", "/otp/send" })
     public ResponseEntity<Map<String, String>> resendOtp(@Valid @RequestBody OtpSendRequest request) {
+        System.out.println("=================================================");
+        System.out.println(">>> RESEND REQUESTED FOR EMAIL: [" + request.getEmail() + "]");
+        System.out.println("=================================================");
         otpService.generateAndSendOtp(request);
         return ResponseEntity.ok(Map.of(
                 "status", "success",
@@ -60,9 +63,12 @@ public class AuthController {
     }
 
     @GetMapping({"/test-email", "/test-mail"})
-    public ResponseEntity<String> testEmail(@RequestParam(defaultValue = "dhanyaande@gmail.com") String to) {
+    public ResponseEntity<String> testEmail(@RequestParam String to) {
+        if (to == null || to.isBlank()) {
+            return ResponseEntity.badRequest().body("Recipient email 'to' parameter is required.");
+        }
         emailService.sendStandaloneTestEmail(to);
-        return ResponseEntity.ok("Test email sent through Brevo SMTP to " + to);
+        return ResponseEntity.ok("Test email dispatched to " + to);
     }
 
     @PostMapping({ "/verify-login-otp", "/verify-otp", "/otp/verify" })
@@ -120,20 +126,7 @@ public class AuthController {
         if (userDetails == null) {
             return ResponseEntity.status(401).build();
         }
-        authService.changePassword(userDetails.getUsername(), request);
-        return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Password changed successfully."));
-    }
-
-    @PostMapping("/admin/users/{userId}/reset-password")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, String>> adminResetPassword(
-            @PathVariable Long userId,
-            @Valid @RequestBody AdminResetPasswordRequest request) {
-        authService.adminResetUserPassword(userId, request.getNewPassword());
-        return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "User password reset successfully."));
+        authService.changePassword(userDetails.getEmail(), request);
+        return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
     }
 }

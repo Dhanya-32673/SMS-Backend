@@ -19,16 +19,13 @@ public class EmailService {
 
     private final String apiKey;
     private final String fromAddress;
-    private final String testOwnerEmail;
 
     public EmailService(
             @Value("${resend.api.key:your_resend_api_key_here}") String apiKey,
-            @Value("${app.mail.from:onboarding@resend.dev}") String fromAddress,
-            @Value("${resend.test.owner-email:#{null}}") String testOwnerEmail
+            @Value("${app.mail.from:onboarding@resend.dev}") String fromAddress
     ) {
         this.apiKey = apiKey != null ? apiKey.trim() : "";
         this.fromAddress = (fromAddress != null && !fromAddress.isBlank()) ? fromAddress.trim() : "onboarding@resend.dev";
-        this.testOwnerEmail = (testOwnerEmail != null && !testOwnerEmail.isBlank()) ? testOwnerEmail.trim() : null;
         log.info(">>> RESEND EMAIL SERVICE INITIALIZED with Sender: " + this.fromAddress);
     }
 
@@ -41,8 +38,10 @@ public class EmailService {
     }
 
     public void sendStandaloneTestEmail(String recipient) {
-        String target = (recipient != null && !recipient.isBlank()) ? recipient : "admin@sicms.edu";
-        sendOtpEmailSync(target, "1234", "TEST");
+        if (recipient == null || recipient.isBlank()) {
+            throw new IllegalArgumentException("Recipient email cannot be null or empty.");
+        }
+        sendOtpEmailSync(recipient, "1234", "TEST");
     }
 
     @Async
@@ -50,8 +49,8 @@ public class EmailService {
         try {
             sendOtpEmailSync(toEmail, otpCode, purpose);
         } catch (Exception e) {
-            log.log(Level.WARNING, ">>> RESEND DISPATCH WARNING: " + e.getMessage());
-            System.err.println(">>> RESEND WARNING: " + e.getMessage());
+            log.log(Level.WARNING, ">>> RESEND DISPATCH WARNING for [" + toEmail + "]: " + e.getMessage());
+            System.err.println(">>> RESEND WARNING for [" + toEmail + "]: " + e.getMessage());
             System.out.println(">>> OTP DISPATCH CODE FOR [" + toEmail + "]: [ " + otpCode + " ]");
         }
     }
@@ -61,7 +60,12 @@ public class EmailService {
     }
 
     public void sendOtpEmailSync(String toEmail, String otpCode, String purpose) {
-        log.info("Resend OTP email request received for: " + toEmail + " (Purpose: " + purpose + ")");
+        if (toEmail == null || toEmail.isBlank()) {
+            throw new IllegalArgumentException("Target user email cannot be empty for OTP delivery.");
+        }
+
+        String userEmail = toEmail.trim().toLowerCase();
+        log.info("Resend OTP email request received for: " + userEmail + " (Purpose: " + purpose + ")");
 
         String timeStr = LocalTime.now().format(DateTimeFormatter.ofPattern("hh:mm:ss a"));
         String subject = "[" + timeStr + "] Your Login OTP - SICMS";
@@ -89,8 +93,9 @@ public class EmailService {
             """, otpCode, otpCode);
 
         System.out.println("=================================================");
-        System.out.println(">>> DISPATCHING RESEND API EMAIL TO: [" + toEmail + "] Purpose: " + purpose);
-        System.out.println(">>> OTP CODE GENERATED FOR [" + toEmail + "]: [ " + otpCode + " ]");
+        System.out.println(">>> RESEND REQUESTED FOR EMAIL: [" + userEmail + "]");
+        System.out.println(">>> OTP GENERATED FOR EMAIL: [" + userEmail + "] Code: [ " + otpCode + " ]");
+        System.out.println(">>> DISPATCHING RESEND API EMAIL FROM [" + fromAddress + "] TO [" + userEmail + "]");
         System.out.println("=================================================");
 
         try {
@@ -101,45 +106,21 @@ public class EmailService {
             Resend resend = new Resend(apiKey);
             CreateEmailOptions params = CreateEmailOptions.builder()
                     .from(fromAddress)
-                    .to(toEmail)
+                    .to(userEmail)
                     .subject(subject)
                     .html(htmlContent)
                     .build();
 
             CreateEmailResponse data = resend.emails().send(params);
+
             System.out.println("=================================================");
             System.out.println(">>> 200 RESEND API DISPATCH SUCCESSFUL! ID: " + (data != null ? data.getId() : "OK"));
-            System.out.println(">>> MAIL SENT TO: [" + toEmail + "] via Resend API");
+            System.out.println(">>> EMAIL SENT TO EMAIL: [" + userEmail + "]");
             System.out.println("=================================================");
-            log.info("Resend API email dispatch successful to " + toEmail);
+            log.info("Resend API email dispatch successful to " + userEmail);
         } catch (Exception e) {
-            System.err.println(">>> RESEND DISPATCH NOTICE for [" + toEmail + "]: " + e.getMessage());
-
-            // Resend Testing Mode Fallback: Re-route unverified recipients to test owner if configured
-            if (testOwnerEmail != null && e.getMessage() != null && (e.getMessage().contains("only send testing emails") || e.getMessage().contains("validation_error") || e.getMessage().contains("403"))) {
-                System.out.println(">>> RESEND TESTING MODE: Re-routing email for [" + toEmail + "] to test owner [" + testOwnerEmail + "]...");
-                try {
-                    Resend resend = new Resend(apiKey);
-                    CreateEmailOptions fallbackParams = CreateEmailOptions.builder()
-                            .from(fromAddress)
-                            .to(testOwnerEmail)
-                            .subject("[TEST MODE: " + toEmail + "] " + subject)
-                            .html(htmlContent)
-                            .build();
-
-                    CreateEmailResponse fallbackData = resend.emails().send(fallbackParams);
-                    System.out.println("=================================================");
-                    System.out.println(">>> 200 RESEND TEST MODE RE-ROUTE SUCCESSFUL!");
-                    System.out.println(">>> DELIVERED TO: [" + testOwnerEmail + "] for target [" + toEmail + "]");
-                    System.out.println("=================================================");
-                    log.info("Resend API test mode re-routed email to " + testOwnerEmail);
-                    return;
-                } catch (Exception fallbackEx) {
-                    System.err.println(">>> RESEND RE-ROUTE ERROR: " + fallbackEx.getMessage());
-                }
-            }
-
-            log.log(Level.SEVERE, "Resend API dispatch failure for [" + toEmail + "]: " + e.getMessage(), e);
+            System.err.println(">>> RESEND DISPATCH ERROR for [" + userEmail + "]: " + e.getMessage());
+            log.log(Level.SEVERE, "Resend API dispatch failure for [" + userEmail + "]: " + e.getMessage(), e);
             throw new RuntimeException("Unable to send OTP email via Resend: " + e.getMessage(), e);
         }
     }
