@@ -24,26 +24,11 @@ public class MailStartupLogger implements CommandLineRunner {
     @Value("${spring.datasource.username:postgres}")
     private String dbUsername;
 
-    @Value("${spring.mail.host:smtp-relay.brevo.com}")
-    private String mailHost;
+    @Value("${resend.api.key:your_resend_api_key_here}")
+    private String resendApiKey;
 
-    @Value("${spring.mail.port:587}")
-    private int mailPort;
-
-    @Value("${spring.mail.username:}")
-    private String mailUsername;
-
-    @Value("${spring.mail.password:}")
-    private String mailPassword;
-
-    @Value("${app.mail.from:bhashyamgnt.edu@gmail.com}")
+    @Value("${app.mail.from:onboarding@resend.dev}")
     private String mailFrom;
-
-    @Value("${spring.mail.properties.mail.smtp.starttls.enable:true}")
-    private boolean starttlsEnable;
-
-    @Value("${spring.mail.properties.mail.smtp.ssl.enable:false}")
-    private boolean sslEnable;
 
     @Autowired(required = false)
     private EmailService emailService;
@@ -57,51 +42,20 @@ public class MailStartupLogger implements CommandLineRunner {
         List<String> activeProfilesList = Arrays.asList(env.getActiveProfiles());
         String activeProfile = activeProfilesList.toString();
 
-        String trimmedUsername = mailUsername != null ? mailUsername.trim() : "";
-        String trimmedPassword = mailPassword != null ? mailPassword.trim() : "";
-
-        boolean usernamePresent = !trimmedUsername.isEmpty();
-        boolean passwordPresent = !trimmedPassword.isEmpty();
-
-        boolean isPlaceholderPassword = trimmedPassword.contains("your_brevo_password_here") ||
-                trimmedPassword.contains("CHANGE_ME") ||
-                trimmedPassword.equalsIgnoreCase("PASSWORD") ||
-                trimmedPassword.contains("example") ||
-                trimmedPassword.contains("REPLACE_WITH_REAL") ||
-                trimmedPassword.contains("PASTE_REAL_BREVO_SMTP_KEY");
+        String trimmedKey = resendApiKey != null ? resendApiKey.trim() : "";
+        boolean keyPresent = !trimmedKey.isEmpty() && !trimmedKey.contains("your_resend_api_key");
 
         System.out.println("=================================================");
-        System.out.println(">>> STARTUP DIAGNOSTICS & MAIL CONFIGURATION");
+        System.out.println(">>> STARTUP DIAGNOSTICS & RESEND MAIL CONFIG");
         System.out.println(">>> Active Profile         : " + activeProfile);
         System.out.println(">>> Datasource URL         : " + dbUrl);
         System.out.println(">>> Datasource Username    : " + dbUsername);
-        System.out.println(">>> SMTP Host              : " + mailHost);
-        System.out.println(">>> SMTP Port              : " + mailPort);
-        System.out.println(">>> SMTP Username          : " + mailUsername);
         System.out.println(">>> Sender Address         : " + mailFrom);
-        System.out.println(">>> STARTTLS Enabled       : " + starttlsEnable);
-        System.out.println(">>> SSL Enabled            : " + sslEnable);
-        System.out.println(">>> SPRING_MAIL_USERNAME present: " + usernamePresent);
-        System.out.println(">>> SPRING_MAIL_PASSWORD present: " + (passwordPresent && !isPlaceholderPassword));
+        System.out.println(">>> RESEND_API_KEY Present : " + keyPresent);
         System.out.println("=================================================");
 
-        // Verify Brevo Sender Identity
-        if (!"bhashyamgnt.edu@gmail.com".equalsIgnoreCase(mailFrom.trim())) {
-            log.warning(">>> BREVO SENDER WARNING: app.mail.from (" + mailFrom + ") is not the primary verified Brevo sender identity. Expected: bhashyamgnt.edu@gmail.com");
-        }
-
-        // Fail-Fast Validation in Production
-        if (activeProfilesList.contains("prod")) {
-            if (!passwordPresent || isPlaceholderPassword) {
-                throw new IllegalStateException("FATAL: SPRING_MAIL_PASSWORD is missing or set to placeholder in Render Environment Variables");
-            }
-        } else {
-            if (!passwordPresent || isPlaceholderPassword) {
-                log.warning(">>> BREVO SMTP PASSWORD WARNING: Password is missing or set to placeholder text in local environment.");
-            } else if (activeProfilesList.contains("local") && emailService != null) {
-                System.out.println(">>> RUNNING LOCAL PROFILE STANDALONE SMTP TEST...");
-                emailService.sendStandaloneTestEmail("dhanyaande@gmail.com");
-            }
+        if (!keyPresent) {
+            log.warning(">>> RESEND API KEY WARNING: RESEND_API_KEY is missing or invalid. Ensure RESEND_API_KEY is set in Render environment variables.");
         }
     }
 }
