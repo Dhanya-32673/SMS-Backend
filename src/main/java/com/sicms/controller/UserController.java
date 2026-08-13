@@ -1,9 +1,6 @@
 package com.sicms.controller;
 
 import com.sicms.dto.ChangePasswordRequest;
-import com.sicms.dto.UserDto;
-import com.sicms.entity.User;
-import com.sicms.repository.UserRepository;
 import com.sicms.security.CustomUserDetails;
 import com.sicms.service.AuthService;
 import jakarta.validation.Valid;
@@ -17,37 +14,20 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/profile")
-public class ProfileController {
+@RequestMapping("/api/users")
+public class UserController {
 
-    private static final Logger log = LoggerFactory.getLogger(ProfileController.class);
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
     private final AuthService authService;
-    private final UserRepository userRepository;
 
-    public ProfileController(AuthService authService, UserRepository userRepository) {
+    public UserController(AuthService authService) {
         this.authService = authService;
-        this.userRepository = userRepository;
-    }
-
-    /**
-     * Get current logged-in user profile
-     */
-    @GetMapping
-    public ResponseEntity<UserDto> getProfile(@AuthenticationPrincipal CustomUserDetails userDetails) {
-        if (userDetails == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        User user = userRepository.findByEmailIgnoreCase(userDetails.getEmail())
-                .orElseThrow(() -> new RuntimeException("User profile not found"));
-
-        return ResponseEntity.ok(new UserDto(user));
     }
 
     /**
      * Change Password for current logged-in user
-     * PUT /api/profile/change-password
+     * PUT /api/users/change-password
      */
     @PutMapping("/change-password")
     public ResponseEntity<Map<String, String>> changePassword(
@@ -58,7 +38,7 @@ public class ProfileController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        log.info("Processing password change request for authenticated user={}", userDetails.getEmail());
+        log.info("Processing password change request via /api/users endpoint for user={}", userDetails.getEmail());
         authService.changePassword(userDetails.getUsername(), request);
 
         return ResponseEntity.ok(Map.of("message", "Password changed successfully"));

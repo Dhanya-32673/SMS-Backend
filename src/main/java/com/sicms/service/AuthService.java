@@ -1,5 +1,8 @@
 package com.sicms.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.sicms.dto.*;
 import com.sicms.entity.OtpPurpose;
 import com.sicms.entity.User;
@@ -17,6 +20,8 @@ import java.time.LocalDateTime;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -170,6 +175,7 @@ public class AuthService {
         userRepository.save(user);
 
         refreshTokenRepository.revokeAllUserTokens(user);
+        log.info("Password successfully updated and tokens revoked for user={}", userEmail);
     }
 
     @Transactional
