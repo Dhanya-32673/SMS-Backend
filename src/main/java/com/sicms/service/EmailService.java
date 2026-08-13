@@ -62,13 +62,9 @@ public class EmailService {
         }
     }
 
-<<<<<<< HEAD
-=======
     public void sendOtpEmail(String to, String otp) {
         sendOtpEmailSync(to, otp, "PASSWORD_RESET");
     }
-
->>>>>>> 2aeb9b8 (Fix forgot password OTP flow: 6-digit OTP, dedicated PasswordResetController, and safe user lookup)
     public void sendOtpEmailSync(String toEmail, String otpCode, String purpose) {
         if (toEmail == null || toEmail.isBlank()) {
             throw new IllegalArgumentException("Target user email cannot be empty for OTP delivery.");
