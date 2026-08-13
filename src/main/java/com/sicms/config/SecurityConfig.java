@@ -60,6 +60,10 @@ public class SecurityConfig {
                                 "/api/users/change-password"
                         ).authenticated()
                         .requestMatchers(
+                                "/api/admin/faculty/reset-password",
+                                "/admin/faculty/reset-password"
+                        ).hasAuthority("ROLE_ADMIN")
+                        .requestMatchers(
                                 "/",
                                 "/health",
                                 "/api/health/**",
@@ -70,6 +74,8 @@ public class SecurityConfig {
                                 "/api/auth/forgot-password",
                                 "/api/auth/verify-reset-otp",
                                 "/api/auth/reset-password",
+                                "/api/auth/faculty/forgot-password",
+                                "/auth/faculty/forgot-password",
                                 "/api/auth/**",
                                 "/auth/**",
                                 "/oauth2/**",
