@@ -170,15 +170,14 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private User seedUser(String email, String fullName, String rawPassword, Role role) {
-        return userRepository.findByEmailIgnoreCase(email).map(existingUser -> {
-            if (existingUser.getPasswordHash() == null || existingUser.getPasswordHash().isBlank()) {
-                existingUser.setPasswordHash(passwordEncoder.encode(rawPassword));
-            }
-            existingUser.setRole(role);
-            existingUser.setAccountEnabled(true);
-            existingUser.setEmailVerified(true);
-            return userRepository.save(existingUser);
-        }).orElseGet(() -> {
+        return userRepository.findByEmailIgnoreCase(email)
+                .map(existingUser -> {
+                    existingUser.setRole(role);
+                    existingUser.setAccountEnabled(true);
+                    existingUser.setEmailVerified(true);
+                    return userRepository.save(existingUser);
+                })
+                .orElseGet(() -> {
             User user = new User();
             user.setFullName(fullName);
             user.setEmail(email);
