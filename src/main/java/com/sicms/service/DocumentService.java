@@ -88,24 +88,48 @@ public class DocumentService {
         storageService.validateDocumentFile(file);
 
         Student student = studentRepository.findByStudentId(studentId)
-                .orElseThrow(() -> new RuntimeException("Student not found with ID: " + studentId));
+                .orElseThrow(() -> new com.sicms.exception.StudentNotFoundException("Student not found with ID: " + studentId));
 
         ensureStudentAccess(student, currentUserEmail, facultyScoped);
 
         DocumentType documentType = documentTypeRepository.findById(documentTypeId)
                 .orElseThrow(() -> new RuntimeException("Document type not found with ID: " + documentTypeId));
 
-        // Enforce duplicate check: 1 certificate per type for each student
-        Optional<StudentDocument> existingOpt = documentRepository.findByStudent_StudentIdAndDocumentType_IdAndStatusNot(
-                studentId, documentTypeId, DocumentStatus.ARCHIVED
+        // Enforce duplicate check with storage verification
+        Optional<StudentDocument> existingOpt = documentRepository.findFirstByStudent_StudentIdAndDocumentType_IdOrderByIdDesc(
+                studentId, documentTypeId
         );
         if (existingOpt.isPresent()) {
             StudentDocument existing = existingOpt.get();
-            throw new com.sicms.exception.DuplicateCertificateException(
-                    existing.getId(),
-                    documentType.getName(),
-                    student.getStudentId()
-            );
+            boolean fileInStorage = existing.getStoragePath() != null && storageService.fileExists(existing.getStoragePath());
+            boolean isArchived = existing.getStatus() == DocumentStatus.ARCHIVED;
+
+            if (!fileInStorage || isArchived || existing.getStoragePath() == null || existing.getStoragePath().isBlank()) {
+                // File missing or soft deleted -> overwrite existing record
+                String newStoragePath = storageService.saveFile(studentId, file);
+                existing.setStoragePath(newStoragePath);
+                existing.setOriginalFileName(file.getOriginalFilename() != null ? file.getOriginalFilename() : "document");
+                existing.setMimeType(file.getContentType());
+                existing.setFileSize(file.getSize());
+                existing.setStatus(DocumentStatus.UPLOADED);
+                if (documentNumber != null) existing.setDocumentNumber(documentNumber);
+                if (issueDate != null) existing.setIssueDate(issueDate);
+                if (expiryDate != null) existing.setExpiryDate(expiryDate);
+                if (issuedBy != null) existing.setIssuedBy(issuedBy);
+                if (notes != null) existing.setNotes(notes);
+                existing.setUploadedBy(uploadedBy);
+                existing.setUploadedAt(LocalDateTime.now());
+                existing.setUpdatedAt(LocalDateTime.now());
+
+                StudentDocument saved = documentRepository.save(existing);
+                return mapToResponse(saved);
+            } else {
+                throw new com.sicms.exception.DuplicateCertificateException(
+                        existing.getId(),
+                        documentType.getName(),
+                        student.getStudentId()
+                );
+            }
         }
 
         String storagePath = storageService.saveFile(studentId, file);
@@ -209,7 +233,7 @@ public class DocumentService {
 
     public List<DocumentResponse> getDocumentsByStudent(String studentId, String currentUserEmail, boolean facultyScoped) {
         Student student = studentRepository.findByStudentId(studentId)
-                .orElseThrow(() -> new RuntimeException("Student not found with ID: " + studentId));
+                .orElseThrow(() -> new com.sicms.exception.StudentNotFoundException("Student not found with ID: " + studentId));
 
         ensureStudentAccess(student, currentUserEmail, facultyScoped);
 
@@ -594,5 +618,36 @@ public class DocumentService {
         if (!facultyService.hasAccessToStudent(faculty, student)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Faculty can only access students from assigned sections.");
         }
+    }
+
+    public Map<String, Object> debugStudentDocuments(String studentId) {
+        Map<String, Object> debug = new java.util.LinkedHashMap<>();
+        Optional<Student> studentOpt = studentRepository.findByStudentId(studentId);
+        debug.put("studentId", studentId);
+        debug.put("studentExists", studentOpt.isPresent());
+
+        if (studentOpt.isPresent()) {
+            Student student = studentOpt.get();
+            debug.put("studentDbId", student.getId());
+            debug.put("fullName", student.getFullName());
+            List<StudentDocument> docs = documentRepository.findByStudentId(student.getId());
+            debug.put("documentCount", docs.size());
+
+            List<String> paths = docs.stream().map(StudentDocument::getStoragePath).collect(Collectors.toList());
+            debug.put("storageObjectPaths", paths);
+
+            long dupCount = docs.stream()
+                    .collect(Collectors.groupingBy(d -> d.getDocumentType().getId(), Collectors.counting()))
+                    .values().stream().filter(c -> c > 1).count();
+            debug.put("duplicateCount", dupCount);
+        } else {
+            debug.put("documentCount", 0);
+            debug.put("storageObjectPaths", Collections.emptyList());
+            debug.put("duplicateCount", 0);
+        }
+
+        debug.put("bucketReachable", storageService.isBucketReachable());
+        debug.put("bucketName", storageService.getBucketName());
+        return debug;
     }
 }

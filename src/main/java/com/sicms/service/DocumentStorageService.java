@@ -54,11 +54,35 @@ public class DocumentStorageService {
     public void validateConfiguration() {
         boolean hasUrl = supabaseUrl != null && !supabaseUrl.isBlank();
         boolean hasKey = (publishableKey != null && !publishableKey.isBlank()) || (secretKey != null && !secretKey.isBlank());
-        
-        if (hasUrl && hasKey) {
-            log.info(">>> [SUPABASE STORAGE] Document Storage Service initialized with active Supabase bucket: " + bucketName);
-        } else {
-            log.warning(">>> [SUPABASE NOTICE] Document Storage running in fallback mode. Missing Supabase keys. Files will be stored locally in " + UPLOAD_ROOT);
+        boolean bucketReachable = isBucketReachable();
+
+        log.info("==========================================================");
+        log.info("SUPABASE STORAGE VERIFICATION AT STARTUP");
+        log.info("Supabase URL: " + (hasUrl ? supabaseUrl : "[MISSING]"));
+        log.info("Bucket Name: " + bucketName);
+        log.info("Bucket Reachable: " + bucketReachable);
+        log.info("Storage Service Initialized: true");
+        log.info("==========================================================");
+
+        if (!bucketReachable && !hasUrl) {
+            log.warning(">>> [SUPABASE NOTICE] Document Storage running in fallback mode (Local Path: " + UPLOAD_ROOT + ")");
+        }
+    }
+
+    public boolean isBucketReachable() {
+        if (supabaseUrl == null || supabaseUrl.isBlank()) return false;
+        String authKey = (secretKey != null && !secretKey.isBlank()) ? secretKey : publishableKey;
+        if (authKey == null || authKey.isBlank()) return false;
+        try {
+            String bucketUrl = supabaseUrl + "/storage/v1/bucket/" + bucketName;
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "Bearer " + authKey);
+            headers.set("apikey", authKey);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<String> response = restTemplate.exchange(bucketUrl, HttpMethod.GET, entity, String.class);
+            return response.getStatusCode().is2xxSuccessful();
+        } catch (Exception e) {
+            return false;
         }
     }
 

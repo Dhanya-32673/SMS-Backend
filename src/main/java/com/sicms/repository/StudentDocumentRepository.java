@@ -21,6 +21,10 @@ public interface StudentDocumentRepository extends JpaRepository<StudentDocument
 
         List<StudentDocument> findByStudent_StudentId(String studentId);
 
+        Optional<StudentDocument> findFirstByStudent_StudentIdAndDocumentType_IdOrderByIdDesc(String studentId, Long documentTypeId);
+
+        long countByStudent_StudentId(String studentId);
+
         Optional<StudentDocument> findFirstByStudentIdAndDocumentTypeIdOrderByIdDesc(Long studentId, Long documentTypeId);
 
         default Optional<StudentDocument> findByStudentIdAndDocumentTypeId(Long studentId, Long documentTypeId) {

@@ -100,8 +100,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DuplicateCertificateException.class)
     public ResponseEntity<java.util.Map<String, Object>> handleDuplicateCertificate(DuplicateCertificateException ex, HttpServletRequest request) {
         java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
-        body.put("success", false);
-        body.put("message", ex.getMessage());
+        body.put("message", "Certificate already exists for " + (ex.getCertificateType() != null ? ex.getCertificateType() : "selected type"));
+        body.put("documentId", ex.getExistingCertificateId());
         body.put("existingCertificateId", ex.getExistingCertificateId());
         body.put("certificateType", ex.getCertificateType());
         body.put("studentId", ex.getStudentId());
