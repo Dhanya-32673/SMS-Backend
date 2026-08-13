@@ -427,8 +427,7 @@ public class DocumentService {
         return count;
     }
 
-    @Cacheable(value = "studentSummaries", key = "{#page, #size, #group, #year, #section, #status, #search, #sortBy, #sortDir, #currentUserEmail, #facultyScoped}")
-    @Transactional(readOnly = true)
+        @Transactional(readOnly = true)
     public PaginatedStudentResponse<StudentCertificateSummaryResponse> getStudentSummaries(
             int page, int size, String group, String year, String section, String status, String search, String sortBy, String sortDir,
             String currentUserEmail,

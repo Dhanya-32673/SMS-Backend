@@ -49,8 +49,7 @@ public class DashboardService {
         this.documentService = documentService;
     }
 
-    @Cacheable(value = "adminDashboard", key = "'summary'")
-    @Transactional(readOnly = true)
+        @Transactional(readOnly = true)
     public AdminDashboardSummaryResponse getAdminSummary() {
         AdminDashboardSummaryResponse summary = new AdminDashboardSummaryResponse();
 
@@ -126,8 +125,7 @@ public class DashboardService {
         return summary;
     }
 
-    @Cacheable(value = "facultyDashboard", key = "#currentUserEmail")
-    @Transactional(readOnly = true)
+        @Transactional(readOnly = true)
     public FacultyDashboardSummaryResponse getFacultySummaryForUser(String currentUserEmail) {
         FacultyDashboardSummaryResponse summary = new FacultyDashboardSummaryResponse();
 

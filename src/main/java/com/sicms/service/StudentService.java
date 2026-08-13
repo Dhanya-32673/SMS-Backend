@@ -158,8 +158,7 @@ public class StudentService {
         return new StudentResponse(saved);
     }
 
-    @Cacheable(value = "students", key = "{#page, #size, #sortBy, #sortDir, #department, #academicYear, #currentYear, #section, #status, #search, #currentUserEmail, #facultyScoped}")
-    @Transactional(readOnly = true)
+        @Transactional(readOnly = true)
     public PaginatedStudentResponse<StudentSummaryResponse> getStudents(
             int page,
             int size,
@@ -203,8 +202,7 @@ public class StudentService {
         );
     }
 
-    @Cacheable(value = "studentProfile", key = "#studentId")
-    @Transactional(readOnly = true)
+        @Transactional(readOnly = true)
     public StudentResponse getStudentByPublicId(String studentId, String currentUserEmail, boolean facultyScoped) {
         Student student = loadStudentForCurrentUser(studentId, currentUserEmail, facultyScoped)
                 .orElseThrow(() -> new StudentNotFoundException("Student with ID '" + studentId + "' not found."));
