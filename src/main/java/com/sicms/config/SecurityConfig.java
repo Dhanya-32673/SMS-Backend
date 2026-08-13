@@ -63,6 +63,7 @@ public class SecurityConfig {
                                 "/api/test-mail/**",
                                 "/api/test-email/**",
                                 "/api/auth/**",
+                                "/api/setup/**",
                                 "/auth/**",
                                 "/oauth2/**",
                                 "/login/**",

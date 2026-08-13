@@ -245,7 +245,7 @@ public class AuthService {
         refreshTokenRepository.revokeAllUserTokens(user);
     }
 
-    private void validatePasswordPolicy(String password) {
+    public void validatePasswordPolicy(String password) {
         if (password == null || password.length() < 8) {
             throw new AuthException("Password does not meet security requirements. Must be at least 8 characters.");
         }

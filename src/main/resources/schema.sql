@@ -315,17 +315,7 @@ VALUES
     (3, 'ROLE_STUDENT', 'Student Account')
 ON CONFLICT (id) DO NOTHING;
 
--- 2. SEED USERS & FACULTY
-INSERT INTO users (id, full_name, email, password_hash, role_id, auth_provider, email_verified, account_enabled)
-VALUES 
-    (1, 'System Administrator', 'admin@college.edu', '$2a$10$wE9q5q8uV5w5Q6.x6q7O1eJ2Q5k5J5k5J5k5J5k5J5k5J5k5J5k5J', 1, 'LOCAL', TRUE, TRUE),
-    (2, 'Admin User', 'dhanyanade@gmail.com', '$2a$10$wE9q5q8uV5w5Q6.x6q7O1eJ2Q5k5J5k5J5k5J5k5J5k5J5k5J5k5J', 1, 'LOCAL', TRUE, TRUE),
-    (3, 'Faculty Member', '2400032673cse1@gmail.com', '$2a$10$wE9q5q8uV5w5Q6.x6q7O1eJ2Q5k5J5k5J5k5J5k5J5k5J5k5J5k5J', 2, 'LOCAL', TRUE, TRUE)
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO faculty (id, faculty_id, user_id, employee_id, first_name, last_name, full_name, gender, mobile_number, email, designation, qualification, department, primary_group, status)
-VALUES (1, 'FAC1005', 3, 'EMP-202605', 'Faculty', 'Member', 'Faculty Member', 'MALE', '9849055555', '2400032673cse1@gmail.com', 'Lecturer', 'M.Sc.', 'General Sciences', 'HEC', 'ACTIVE')
-ON CONFLICT (id) DO NOTHING;
+-- 2. REFERENCE MASTER DATA ONLY (No hardcoded user seed data)
 
 -- 3. SEED ACADEMIC GROUPS
 INSERT INTO academic_groups (code, name, description, active)
