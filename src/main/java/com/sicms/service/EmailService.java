@@ -55,10 +55,6 @@ public class EmailService {
         }
     }
 
-    public void sendOtpEmail(String to, String otp) {
-        sendOtpEmailSync(to, otp, "LOGIN");
-    }
-
     public void sendOtpEmailSync(String toEmail, String otpCode, String purpose) {
         if (toEmail == null || toEmail.isBlank()) {
             throw new IllegalArgumentException("Target user email cannot be empty for OTP delivery.");
