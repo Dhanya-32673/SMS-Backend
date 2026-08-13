@@ -82,7 +82,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         if (roleName.contains("ADMIN")) {
             log.info("Google login verified for ADMIN: {}. Triggering OTP verification.", normalizedEmail);
             try {
-                otpService.generateAndSendOtp(user.getEmail(), OtpPurpose.ADMIN_LOGIN);
+                otpService.generateAndSendOtp(user.getEmail(), OtpPurpose.LOGIN);
             } catch (Exception e) {
                 log.error("Failed to generate OTP for admin: " + e.getMessage(), e);
             }
