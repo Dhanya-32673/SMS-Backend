@@ -22,7 +22,7 @@ public class OAuth2Controller {
     private final UserRepository userRepository;
     private final JwtService jwtService;
 
-    @Value("${spring.security.oauth2.client.registration.google.client-id:your_google_client_id_here}")
+    @Value("${spring.security.oauth2.client.registration.google.client-id:1078205301117-2u5nd4rn8hraa9jjo8hij2r2i0htcsac.apps.googleusercontent.com}")
     private String googleClientId;
 
     @Value("${app.frontend.url:https://bhashyamgnt.vercel.app}")
@@ -48,9 +48,9 @@ public class OAuth2Controller {
                     .queryParam("client_id", googleClientId)
                     .queryParam("response_type", "code")
                     .queryParam("scope", "email profile openid")
-                    .queryParam("redirect_uri", URLEncoder.encode("http://localhost:8080/login/oauth2/code/google", StandardCharsets.UTF_8))
+                    .queryParam("redirect_uri", "http://localhost:8080/login/oauth2/code/google")
                     .queryParam("prompt", "select_account")
-                    .build(true).toUriString();
+                    .build().toUriString();
 
             response.sendRedirect(googleAuthUrl);
             return;
