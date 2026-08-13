@@ -59,6 +59,7 @@ public class DocumentStorageService {
         log.info("==========================================================");
         log.info("SUPABASE STORAGE VERIFICATION AT STARTUP");
         log.info("Supabase URL: " + (hasUrl ? supabaseUrl : "[MISSING]"));
+        log.info("Supabase Key Configured: " + hasKey);
         log.info("Bucket Name: " + bucketName);
         log.info("Bucket Reachable: " + bucketReachable);
         log.info("Storage Service Initialized: true");
