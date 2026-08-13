@@ -59,11 +59,11 @@ public class AuthService {
         }
 
         otpService.generateAndSendOtp(user.getEmail(), OtpPurpose.LOGIN);
-        return new LoginInitiatedResponse(true, "OTP sent successfully to admin email");
+        return new LoginInitiatedResponse("OTP sent successfully to admin email", user.getEmail(), true);
     }
 
     @Transactional
-    public AuthResponse verifyAdminOtp(VerifyOtpRequest request) {
+    public LoginVerifyResponse verifyAdminOtp(OtpVerifyRequest request) {
         String email = request.getEmail().trim().toLowerCase();
         User user = otpService.verifyOtpAndGetUser(email, request.getOtp(), OtpPurpose.LOGIN);
 
@@ -76,7 +76,7 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResponse facultyLogin(LoginRequest request) {
+    public LoginVerifyResponse facultyLogin(LoginRequest request) {
         User user = validateEmailPasswordLogin(request);
 
         String roleName = user.getRole() != null ? user.getRole().getRoleName() : "";
@@ -91,11 +91,11 @@ public class AuthService {
     public LoginInitiatedResponse login(LoginRequest request) {
         User user = validateEmailPasswordLogin(request);
         otpService.generateAndSendOtp(user.getEmail(), OtpPurpose.LOGIN);
-        return new LoginInitiatedResponse(true, "OTP sent successfully");
+        return new LoginInitiatedResponse("OTP sent successfully", user.getEmail(), true);
     }
 
     @Transactional
-    public AuthResponse verifyOtp(VerifyOtpRequest request) {
+    public LoginVerifyResponse verifyOtp(OtpVerifyRequest request) {
         String email = request.getEmail().trim().toLowerCase();
         User user = otpService.verifyOtpAndGetUser(email, request.getOtp(), OtpPurpose.LOGIN);
         return issueTokensForUser(user);
@@ -124,8 +124,9 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResponse refreshAccessToken(String refreshTokenStr) {
-        return refreshTokenService.refreshAccessToken(refreshTokenStr);
+    public LoginVerifyResponse refreshAccessToken(String refreshTokenStr) {
+        User user = refreshTokenService.verifyAndRotateRefreshToken(refreshTokenStr);
+        return issueTokensForUser(user);
     }
 
     private User validateEmailPasswordLogin(LoginRequest request) {
@@ -155,22 +156,20 @@ public class AuthService {
         return user;
     }
 
-    private AuthResponse issueTokensForUser(User user) {
+    private LoginVerifyResponse issueTokensForUser(User user) {
         String accessToken = jwtService.generateAccessToken(user);
-        com.sicms.entity.RefreshToken refreshTokenEntity = refreshTokenService.createRefreshToken(user);
+        String refreshTokenStr = refreshTokenService.createRefreshToken(user);
+        UserDto userDto = new UserDto(user);
 
-        UserResponse userResponse = new UserResponse(
-                user.getUserId(),
-                user.getEmail(),
-                user.getFullName(),
-                user.getRole() != null ? user.getRole().getRoleName() : null,
-                user.getDepartment() != null ? user.getDepartment().getDepartmentName() : null
-        );
-
-        return new AuthResponse(
+        return new LoginVerifyResponse(
+                true,
+                true,
                 accessToken,
-                refreshTokenEntity.getToken(),
-                userResponse
+                86400000L,
+                refreshTokenStr,
+                null,
+                "Authentication successful",
+                userDto
         );
     }
 

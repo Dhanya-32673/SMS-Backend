@@ -33,14 +33,14 @@ public class AuthController {
     }
 
     @PostMapping("/admin/verify-otp")
-    public ResponseEntity<AuthResponse> verifyAdminOtp(@Valid @RequestBody VerifyOtpRequest request) {
-        AuthResponse response = authService.verifyAdminOtp(request);
+    public ResponseEntity<LoginVerifyResponse> verifyAdminOtp(@Valid @RequestBody OtpVerifyRequest request) {
+        LoginVerifyResponse response = authService.verifyAdminOtp(request);
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/faculty/login")
-    public ResponseEntity<AuthResponse> facultyLogin(@Valid @RequestBody LoginRequest request) {
-        AuthResponse response = authService.facultyLogin(request);
+    public ResponseEntity<LoginVerifyResponse> facultyLogin(@Valid @RequestBody LoginRequest request) {
+        LoginVerifyResponse response = authService.facultyLogin(request);
         return ResponseEntity.ok(response);
     }
 
@@ -51,8 +51,8 @@ public class AuthController {
     }
 
     @PostMapping("/verify-otp")
-    public ResponseEntity<AuthResponse> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
-        AuthResponse response = authService.verifyOtp(request);
+    public ResponseEntity<LoginVerifyResponse> verifyOtp(@Valid @RequestBody OtpVerifyRequest request) {
+        LoginVerifyResponse response = authService.verifyOtp(request);
         return ResponseEntity.ok(response);
     }
 
