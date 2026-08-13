@@ -220,17 +220,20 @@ public class DocumentService {
         documentRepository.delete(doc);
     }
 
+    @Transactional(readOnly = true)
     public DocumentResponse getDocumentById(Long id, String currentUserEmail, boolean facultyScoped) {
         StudentDocument doc = getAccessibleDocumentById(id, currentUserEmail, facultyScoped)
                 .orElseThrow(() -> new RuntimeException("Document not found with ID: " + id));
         return mapToResponse(doc);
     }
 
+    @Transactional(readOnly = true)
     public StudentDocument getDocumentEntityById(Long id, String currentUserEmail, boolean facultyScoped) {
         return getAccessibleDocumentById(id, currentUserEmail, facultyScoped)
                 .orElseThrow(() -> new RuntimeException("Document not found with ID: " + id));
     }
 
+    @Transactional(readOnly = true)
     public List<DocumentResponse> getDocumentsByStudent(String studentId, String currentUserEmail, boolean facultyScoped) {
         Student student = studentRepository.findByStudentId(studentId)
                 .orElseThrow(() -> new com.sicms.exception.StudentNotFoundException("Student not found with ID: " + studentId));
@@ -243,6 +246,7 @@ public class DocumentService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public PaginatedStudentResponse<DocumentSummaryResponse> filterAndSearchDocuments(
             int page, int size, String studentId, Long documentTypeId, DocumentCategory category,
             DocumentStatus status, String search, String sortBy, String sortDir,
@@ -328,6 +332,7 @@ public class DocumentService {
         return mapToResponse(documentRepository.save(doc));
     }
 
+    @Transactional(readOnly = true)
     public List<MissingDocumentResponse> getMissingDocuments(String currentUserEmail, boolean facultyScoped) {
         List<DocumentType> requiredTypes = documentTypeRepository.findByActiveTrue()
                 .stream().filter(DocumentType::isRequiredByDefault).collect(Collectors.toList());
@@ -620,6 +625,7 @@ public class DocumentService {
         }
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> debugStudentDocuments(String studentId) {
         Map<String, Object> debug = new java.util.LinkedHashMap<>();
         Optional<Student> studentOpt = studentRepository.findByStudentId(studentId);

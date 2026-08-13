@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,10 +18,13 @@ import com.sicms.entity.StudentDocument;
 @Repository
 public interface StudentDocumentRepository extends JpaRepository<StudentDocument, Long> {
 
+        @EntityGraph(attributePaths = {"student", "documentType"})
         List<StudentDocument> findByStudentId(Long studentId);
 
+        @EntityGraph(attributePaths = {"student", "documentType"})
         List<StudentDocument> findByStudent_StudentId(String studentId);
 
+        @EntityGraph(attributePaths = {"student", "documentType"})
         Optional<StudentDocument> findFirstByStudent_StudentIdAndDocumentType_IdOrderByIdDesc(String studentId, Long documentTypeId);
 
         long countByStudent_StudentId(String studentId);
@@ -66,7 +70,7 @@ public interface StudentDocumentRepository extends JpaRepository<StudentDocument
                         "))", nativeQuery = true)
         long countTotalMissingDocumentsFast();
 
-        @Query("SELECT d FROM StudentDocument d JOIN d.student s JOIN d.documentType t WHERE " +
+        @Query("SELECT d FROM StudentDocument d JOIN FETCH d.student s JOIN FETCH d.documentType t WHERE " +
                         "(:studentId IS NULL OR :studentId = '' OR LOWER(s.studentId) = LOWER(CAST(:studentId AS string))) AND "
                         +
                         "(:documentTypeId IS NULL OR t.id = :documentTypeId) AND " +
@@ -86,7 +90,7 @@ public interface StudentDocumentRepository extends JpaRepository<StudentDocument
                         @Param("search") String search,
                         Pageable pageable);
 
-        @Query("SELECT d FROM StudentDocument d JOIN d.student s JOIN s.academicDetail a JOIN d.documentType t WHERE " +
+        @Query("SELECT d FROM StudentDocument d JOIN FETCH d.student s JOIN FETCH s.academicDetail a JOIN FETCH d.documentType t WHERE " +
                         "EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND "
                         +
                         "LOWER(fa.branchGroup) = LOWER(a.branchGroup) AND LOWER(fa.intermediateYear) = LOWER(a.intermediateYear) AND "
@@ -113,7 +117,7 @@ public interface StudentDocumentRepository extends JpaRepository<StudentDocument
                         @Param("search") String search,
                         Pageable pageable);
 
-        @Query("SELECT d FROM StudentDocument d JOIN d.student s JOIN s.academicDetail a WHERE d.id = :id AND EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND "
+        @Query("SELECT d FROM StudentDocument d JOIN FETCH d.student s JOIN FETCH s.academicDetail a JOIN FETCH d.documentType t WHERE d.id = :id AND EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND "
                         +
                         "LOWER(fa.branchGroup) = LOWER(a.branchGroup) AND LOWER(fa.intermediateYear) = LOWER(a.intermediateYear) AND "
                         +
