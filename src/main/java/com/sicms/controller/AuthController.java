@@ -5,6 +5,7 @@ import com.sicms.entity.User;
 import com.sicms.repository.UserRepository;
 import com.sicms.security.CustomUserDetails;
 import com.sicms.service.AuthService;
+import com.sicms.service.GoogleAuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,10 +21,12 @@ public class AuthController {
 
     private final AuthService authService;
     private final UserRepository userRepository;
+    private final GoogleAuthService googleAuthService;
 
-    public AuthController(AuthService authService, UserRepository userRepository) {
+    public AuthController(AuthService authService, UserRepository userRepository, GoogleAuthService googleAuthService) {
         this.authService = authService;
         this.userRepository = userRepository;
+        this.googleAuthService = googleAuthService;
     }
 
     @PostMapping("/admin/login")
@@ -48,6 +51,20 @@ public class AuthController {
     public ResponseEntity<LoginInitiatedResponse> login(@Valid @RequestBody LoginRequest request) {
         LoginInitiatedResponse response = authService.login(request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<LoginInitiatedResponse> googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
+        LoginInitiatedResponse response = googleAuthService.authenticateGoogleUser(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/oauth2/authorization/google")
+    public ResponseEntity<Map<String, String>> oauth2GoogleFallback() {
+        return ResponseEntity.ok(Map.of(
+                "status", "ONLINE",
+                "message", "Google OAuth2 endpoint active. Please send Google ID token to /api/auth/google endpoint."
+        ));
     }
 
     @PostMapping("/verify-otp")
