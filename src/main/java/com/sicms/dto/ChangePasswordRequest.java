@@ -1,6 +1,7 @@
 package com.sicms.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 public class ChangePasswordRequest {
 
@@ -8,10 +9,12 @@ public class ChangePasswordRequest {
     private String currentPassword;
 
     @NotBlank(message = "New password is required")
+    @Size(min = 8, message = "New password must be at least 8 characters")
     private String newPassword;
 
-    @NotBlank(message = "Confirm password is required")
     private String confirmPassword;
+
+    private String confirmNewPassword;
 
     public ChangePasswordRequest() {
     }
@@ -20,6 +23,7 @@ public class ChangePasswordRequest {
         this.currentPassword = currentPassword;
         this.newPassword = newPassword;
         this.confirmPassword = confirmPassword;
+        this.confirmNewPassword = confirmPassword;
     }
 
     public String getCurrentPassword() {
@@ -39,10 +43,18 @@ public class ChangePasswordRequest {
     }
 
     public String getConfirmPassword() {
-        return confirmPassword;
+        return confirmPassword != null ? confirmPassword : confirmNewPassword;
     }
 
     public void setConfirmPassword(String confirmPassword) {
         this.confirmPassword = confirmPassword;
+    }
+
+    public String getConfirmNewPassword() {
+        return confirmNewPassword != null ? confirmNewPassword : confirmPassword;
+    }
+
+    public void setConfirmNewPassword(String confirmNewPassword) {
+        this.confirmNewPassword = confirmNewPassword;
     }
 }

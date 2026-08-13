@@ -11,11 +11,9 @@ import com.sicms.repository.RefreshTokenRepository;
 import com.sicms.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Service
@@ -25,18 +23,18 @@ public class PasswordResetService {
 
     private final UserRepository userRepository;
     private final OtpService otpService;
-    private final PasswordEncoder passwordEncoder;
+    private final UserService userService;
     private final RefreshTokenRepository refreshTokenRepository;
 
     public PasswordResetService(
             UserRepository userRepository,
             OtpService otpService,
-            PasswordEncoder passwordEncoder,
+            UserService userService,
             RefreshTokenRepository refreshTokenRepository
     ) {
         this.userRepository = userRepository;
         this.otpService = otpService;
-        this.passwordEncoder = passwordEncoder;
+        this.userService = userService;
         this.refreshTokenRepository = refreshTokenRepository;
     }
 
@@ -89,10 +87,8 @@ public class PasswordResetService {
         // Verify 6-digit OTP code for PASSWORD_RESET purpose
         User user = otpService.verifyOtpAndGetUser(request.getEmail(), request.getOtp(), OtpPurpose.PASSWORD_RESET);
 
-        // Encode and save new password
-        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
-        user.setUpdatedAt(LocalDateTime.now());
-        userRepository.save(user);
+        // Encode and save new password via central UserService updatePassword method
+        userService.updatePassword(user, request.getNewPassword());
 
         // Revoke all active sessions
         refreshTokenRepository.revokeAllUserTokens(user);
