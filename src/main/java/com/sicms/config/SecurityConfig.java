@@ -3,6 +3,8 @@ package com.sicms.config;
 import com.sicms.security.CustomAccessDeniedHandler;
 import com.sicms.security.CustomAuthenticationEntryPoint;
 import com.sicms.security.JwtAuthenticationFilter;
+import com.sicms.security.OAuth2AuthenticationFailureHandler;
+import com.sicms.security.OAuth2AuthenticationSuccessHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -25,17 +27,23 @@ public class SecurityConfig {
     private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
     private final CustomAccessDeniedHandler customAccessDeniedHandler;
     private final CorsConfigurationSource corsConfigurationSource;
+    private final OAuth2AuthenticationSuccessHandler oAuth2SuccessHandler;
+    private final OAuth2AuthenticationFailureHandler oAuth2FailureHandler;
 
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthFilter,
             CustomAuthenticationEntryPoint customAuthenticationEntryPoint,
             CustomAccessDeniedHandler customAccessDeniedHandler,
-            CorsConfigurationSource corsConfigurationSource
+            CorsConfigurationSource corsConfigurationSource,
+            OAuth2AuthenticationSuccessHandler oAuth2SuccessHandler,
+            OAuth2AuthenticationFailureHandler oAuth2FailureHandler
     ) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.customAuthenticationEntryPoint = customAuthenticationEntryPoint;
         this.customAccessDeniedHandler = customAccessDeniedHandler;
         this.corsConfigurationSource = corsConfigurationSource;
+        this.oAuth2SuccessHandler = oAuth2SuccessHandler;
+        this.oAuth2FailureHandler = oAuth2FailureHandler;
     }
 
     @Bean
@@ -89,6 +97,16 @@ public class SecurityConfig {
                         .requestMatchers("/api/faculty/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_FACULTY")
                         .requestMatchers("/api/documents/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_FACULTY")
                         .anyRequest().authenticated()
+                )
+                .oauth2Login(oauth2 -> oauth2
+                        .authorizationEndpoint(authorization -> authorization
+                                .baseUri("/oauth2/authorization")
+                        )
+                        .redirectionEndpoint(redirection -> redirection
+                                .baseUri("/login/oauth2/code/*")
+                        )
+                        .successHandler(oAuth2SuccessHandler)
+                        .failureHandler(oAuth2FailureHandler)
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
