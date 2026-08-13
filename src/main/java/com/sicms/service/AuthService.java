@@ -1,5 +1,7 @@
 package com.sicms.service;
 
+import org.springframework.security.access.AccessDeniedException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +46,57 @@ public class AuthService {
         this.refreshTokenService = refreshTokenService;
         this.otpService = otpService;
         this.refreshTokenRepository = refreshTokenRepository;
+    }
+
+    @Transactional
+    public LoginInitiatedResponse adminLogin(LoginRequest request) {
+        User user = validateEmailPasswordLogin(request);
+
+        String roleName = user.getRole() != null ? user.getRole().getRoleName() : "";
+        if (!"ROLE_ADMIN".equalsIgnoreCase(roleName) && !"ADMIN".equalsIgnoreCase(roleName)) {
+            throw new AccessDeniedException("Role mismatch: User is not an ADMIN");
+        }
+
+        otpService.generateAndSendOtp(user.getEmail(), OtpPurpose.LOGIN);
+
+        return new LoginInitiatedResponse(
+                "OTP sent successfully",
+                user.getEmail(),
+                true
+        );
+    }
+
+    @Transactional
+    public LoginResponse verifyAdminOtp(OtpVerifyRequest request) {
+        User user = userRepository.findByEmailIgnoreCase(request.getEmail().trim().toLowerCase())
+                .orElseThrow(() -> new InvalidCredentialsException("User account not found"));
+
+        String roleName = user.getRole() != null ? user.getRole().getRoleName() : "";
+        if (!"ROLE_ADMIN".equalsIgnoreCase(roleName) && !"ADMIN".equalsIgnoreCase(roleName)) {
+            throw new AccessDeniedException("Role mismatch: User is not an ADMIN");
+        }
+
+        return otpService.verifyLoginOtp(request);
+    }
+
+    @Transactional
+    public LoginResponse facultyLogin(LoginRequest request) {
+        User user = validateEmailPasswordLogin(request);
+
+        String roleName = user.getRole() != null ? user.getRole().getRoleName() : "";
+        if (!"ROLE_FACULTY".equalsIgnoreCase(roleName) && !"FACULTY".equalsIgnoreCase(roleName)) {
+            throw new AccessDeniedException("Role mismatch: User is not a FACULTY member");
+        }
+
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshToken = refreshTokenService.createRefreshToken(user);
+
+        return new LoginResponse(
+                accessToken,
+                jwtService.getAccessExpirationSeconds(),
+                refreshToken,
+                new com.sicms.dto.UserDto(user)
+        );
     }
 
     @Transactional

@@ -38,6 +38,24 @@ public class AuthController {
         this.emailService = emailService;
     }
 
+        @PostMapping("/admin/login")
+    public ResponseEntity<LoginInitiatedResponse> adminLogin(@Valid @RequestBody LoginRequest request) {
+        LoginInitiatedResponse response = authService.adminLogin(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/admin/verify-otp")
+    public ResponseEntity<LoginResponse> verifyAdminOtp(@Valid @RequestBody OtpVerifyRequest request) {
+        LoginResponse response = authService.verifyAdminOtp(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/faculty/login")
+    public ResponseEntity<LoginResponse> facultyLogin(@Valid @RequestBody LoginRequest request) {
+        LoginResponse response = authService.facultyLogin(request);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/login")
     public ResponseEntity<LoginInitiatedResponse> login(@Valid @RequestBody LoginRequest request) {
         LoginInitiatedResponse response = authService.login(request);
