@@ -41,6 +41,12 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/admin/send-otp")
+    public ResponseEntity<Map<String, String>> sendAdminOtp(@Valid @RequestBody ResendOtpRequest request) {
+        authService.resendOtp(request);
+        return ResponseEntity.ok(Map.of("message", "Admin OTP sent successfully"));
+    }
+
     @PostMapping("/faculty/login")
     public ResponseEntity<LoginVerifyResponse> facultyLogin(@Valid @RequestBody LoginRequest request) {
         LoginVerifyResponse response = authService.facultyLogin(request);

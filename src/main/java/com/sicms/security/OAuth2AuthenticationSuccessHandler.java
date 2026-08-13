@@ -1,7 +1,9 @@
 package com.sicms.security;
 
+import com.sicms.entity.OtpPurpose;
 import com.sicms.entity.User;
 import com.sicms.repository.UserRepository;
+import com.sicms.service.OtpService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -26,13 +28,17 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 
     private final UserRepository userRepository;
     private final JwtService jwtService;
+    private final OtpService otpService;
 
     @Value("${app.frontend.url:https://bhashyamgnt.vercel.app}")
     private String frontendUrl;
 
-    public OAuth2AuthenticationSuccessHandler(UserRepository userRepository, JwtService jwtService) {
+    public OAuth2AuthenticationSuccessHandler(UserRepository userRepository,
+                                                JwtService jwtService,
+                                                OtpService otpService) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
+        this.otpService = otpService;
     }
 
     @Override
@@ -54,9 +60,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         Optional<User> existingUser = userRepository.findByEmailIgnoreCase(normalizedEmail);
 
         if (existingUser.isEmpty()) {
-            log.warn("Unauthorized Google login attempt: {}", normalizedEmail);
+            log.warn("Unauthorized Google login attempt - user not found in database: {}", normalizedEmail);
             String redirectUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/login")
-                    .queryParam("error", "google_not_authorized")
+                    .queryParam("error", "unauthorized")
                     .build().toUriString();
             getRedirectStrategy().sendRedirect(request, response, redirectUrl);
             return;
@@ -70,26 +76,44 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
             return;
         }
 
-        String roleName = user.getRole() != null ? user.getRole().getRoleName() : "";
-        boolean isAuthorizedRole = roleName.contains("ADMIN") || roleName.contains("FACULTY");
+        String roleName = user.getRole() != null ? user.getRole().getRoleName().toUpperCase() : "";
 
-        if (!isAuthorizedRole) {
-            log.warn("Google login rejected - Unauthorized role '{}': {}", roleName, normalizedEmail);
-            getRedirectStrategy().sendRedirect(request, response, frontendUrl + "/login?error=role_not_allowed");
+        // Admin Role: Requires 2FA OTP verification before issuing final JWT
+        if (roleName.contains("ADMIN")) {
+            log.info("Google login verified for ADMIN: {}. Triggering OTP verification.", normalizedEmail);
+            try {
+                otpService.generateAndSendOtp(user.getEmail(), OtpPurpose.ADMIN_LOGIN);
+            } catch (Exception e) {
+                log.error("Failed to generate OTP for admin: " + e.getMessage(), e);
+            }
+
+            String targetUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/admin-otp")
+                    .queryParam("email", URLEncoder.encode(user.getEmail(), StandardCharsets.UTF_8))
+                    .queryParam("name", URLEncoder.encode(name != null ? name : user.getFullName(), StandardCharsets.UTF_8))
+                    .build(true).toUriString();
+
+            getRedirectStrategy().sendRedirect(request, response, targetUrl);
             return;
         }
 
-        String token = jwtService.generateAccessToken(user);
+        // Faculty or Student Role: Direct Login with JWT
+        if (roleName.contains("FACULTY") || roleName.contains("STUDENT")) {
+            String token = jwtService.generateAccessToken(user);
+            log.info("Google login success for {}: Direct JWT issued", normalizedEmail);
 
-        log.info("Google login success: {}", normalizedEmail);
+            String targetUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/oauth-success")
+                    .queryParam("token", token)
+                    .queryParam("role", roleName)
+                    .queryParam("email", URLEncoder.encode(user.getEmail(), StandardCharsets.UTF_8))
+                    .queryParam("name", URLEncoder.encode(name != null ? name : user.getFullName(), StandardCharsets.UTF_8))
+                    .build(true).toUriString();
 
-        String targetUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/oauth-success")
-                .queryParam("token", token)
-                .queryParam("role", roleName)
-                .queryParam("email", URLEncoder.encode(user.getEmail(), StandardCharsets.UTF_8))
-                .queryParam("name", URLEncoder.encode(name != null ? name : user.getFullName(), StandardCharsets.UTF_8))
-                .build(true).toUriString();
+            getRedirectStrategy().sendRedirect(request, response, targetUrl);
+            return;
+        }
 
-        getRedirectStrategy().sendRedirect(request, response, targetUrl);
+        // Other unauthorized roles
+        log.warn("Google login rejected - Role '{}' not allowed: {}", roleName, normalizedEmail);
+        getRedirectStrategy().sendRedirect(request, response, frontendUrl + "/login?error=role_not_allowed");
     }
 }
