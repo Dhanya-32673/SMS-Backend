@@ -691,7 +691,12 @@ class SicmsApiIntegrationTest {
     private JsonNode login(String email, String password) throws Exception {
         ResponseEntity<String> response = postJson("/api/auth/login", Map.of("email", email, "password", password), null);
         assertEquals(HttpStatus.OK, response.getStatusCode(), response.getBody());
-        return readJson(response);
+
+        String otp = waitForOtp(email, "LOGIN");
+        ResponseEntity<String> verifyResponse = postJson("/api/auth/verify-otp", Map.of("email", email, "otp", otp), null);
+        assertEquals(HttpStatus.OK, verifyResponse.getStatusCode(), verifyResponse.getBody());
+
+        return readJson(verifyResponse);
     }
 
     private String waitForOtp(String email, String purpose) throws InterruptedException {
@@ -715,9 +720,15 @@ class SicmsApiIntegrationTest {
 
     private String crackOtp(String otpHash) {
         for (int i = 0; i <= 999999; i++) {
-            String candidate = String.format("%06d", i);
-            if (hashOtp(candidate).equals(otpHash)) {
-                return candidate;
+            if (i <= 9999) {
+                String candidate4 = String.format("%04d", i);
+                if (hashOtp(candidate4).equals(otpHash)) {
+                    return candidate4;
+                }
+            }
+            String candidate6 = String.format("%06d", i);
+            if (hashOtp(candidate6).equals(otpHash)) {
+                return candidate6;
             }
         }
         fail("Unable to crack OTP hash for automated verification");
@@ -728,7 +739,7 @@ class SicmsApiIntegrationTest {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(rawOtp.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(hash);
+            return java.util.HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is unavailable", e);
         }

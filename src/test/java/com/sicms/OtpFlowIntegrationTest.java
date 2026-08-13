@@ -9,6 +9,7 @@ import com.sicms.entity.User;
 import com.sicms.repository.OtpRepository;
 import com.sicms.repository.RoleRepository;
 import com.sicms.repository.UserRepository;
+import com.sicms.service.OtpService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,7 +21,9 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Base64;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
 
@@ -41,6 +44,9 @@ public class OtpFlowIntegrationTest {
 
     @Autowired
     private OtpRepository otpRepository;
+
+    @Autowired
+    private OtpService otpService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -72,7 +78,7 @@ public class OtpFlowIntegrationTest {
 
     @Test
     void testCompleteOtpFlow() throws Exception {
-        // Step 1: Call send-login-otp
+        // Step 1: Call login
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         
@@ -102,7 +108,7 @@ public class OtpFlowIntegrationTest {
             String candidate = String.format("%04d", i);
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(candidate.getBytes(StandardCharsets.UTF_8));
-            String candidateHash = Base64.getEncoder().encodeToString(hash);
+            String candidateHash = HexFormat.of().formatHex(hash);
             if (candidateHash.equals(hashedOtp)) {
                 rawOtp = candidate;
                 break;
@@ -113,7 +119,7 @@ public class OtpFlowIntegrationTest {
         // Step 3: Call verify-login-otp
         Map<String, String> verifyBody = Map.of(
                 "email", testEmail,
-                "otpCode", rawOtp
+                "otp", rawOtp
         );
 
         HttpEntity<Map<String, String>> verifyRequest = new HttpEntity<>(verifyBody, headers);
@@ -129,5 +135,39 @@ public class OtpFlowIntegrationTest {
         // Assert OTP marked as used
         Optional<OtpVerification> updatedOtp = otpRepository.findById(otpOpt.get().getId());
         assertTrue(updatedOtp.isPresent() && Boolean.TRUE.equals(updatedOtp.get().getUsed()), "OTP must be marked as used");
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional
+    void testStrictOtpFlowAndRejection() throws Exception {
+        User user = userRepository.findByEmailIgnoreCase(testEmail).orElseThrow();
+
+        // 1. Manually insert known OTP code "5678" for testing
+        otpRepository.invalidateAllPreviousOtpsForEmail(testEmail, OtpPurpose.LOGIN);
+        
+        OtpVerification verification = new OtpVerification();
+        verification.setEmail(testEmail);
+        verification.setUser(user);
+        verification.setPurpose(OtpPurpose.LOGIN);
+        verification.setOtpHash(otpService.hashOtp("5678"));
+        verification.setExpiresAt(Instant.now().plus(5, ChronoUnit.MINUTES));
+        verification.setAttemptCount(0);
+        verification.setUsed(false);
+        otpRepository.save(verification);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        // 2. Reject wrong OTP "1234"
+        HttpEntity<Map<String, String>> wrongReq = new HttpEntity<>(Map.of("email", testEmail, "otp", "1234"), headers);
+        ResponseEntity<String> wrongRes = restTemplate.postForEntity("/api/auth/verify-login-otp", wrongReq, String.class);
+        assertEquals(HttpStatus.BAD_REQUEST, wrongRes.getStatusCode());
+
+        // 3. Accept exact matching OTP "5678"
+        HttpEntity<Map<String, String>> matchReq = new HttpEntity<>(Map.of("email", testEmail, "otp", "5678"), headers);
+        ResponseEntity<String> matchRes = restTemplate.postForEntity("/api/auth/verify-login-otp", matchReq, String.class);
+        assertEquals(HttpStatus.OK, matchRes.getStatusCode());
+        JsonNode json = objectMapper.readTree(matchRes.getBody());
+        assertNotNull(json.get("accessToken"));
     }
 }

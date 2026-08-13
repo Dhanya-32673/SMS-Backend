@@ -24,8 +24,13 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 @Service
 public class OtpService {
+
+    private static final Logger log = Logger.getLogger(OtpService.class.getName());
 
     private final OtpRepository otpRepository;
     private final UserRepository userRepository;
@@ -56,7 +61,7 @@ public class OtpService {
 
         String cleanEmail = email.trim().toLowerCase();
         System.out.println("=================================================");
-        System.out.println(">>> RESEND REQUESTED FOR EMAIL: [" + cleanEmail + "] (Purpose: " + purpose + ")");
+        System.out.println(">>> OTP REQUESTED FOR EMAIL: [" + cleanEmail + "] (Purpose: " + purpose + ")");
         System.out.println("=================================================");
 
         User user = userRepository.findByEmailIgnoreCase(cleanEmail)
@@ -91,8 +96,13 @@ public class OtpService {
         // Invalidate previous active OTPs for this email & purpose
         otpRepository.invalidateAllPreviousOtpsForEmail(cleanEmail, purpose);
 
-        // Generate random 4-digit OTP (1000–9999)
-        String rawOtp = String.format("%04d", 1000 + secureRandom.nextInt(9000));
+        // Generate OTP (6-digit for PASSWORD_RESET, 4-digit for LOGIN)
+        String rawOtp;
+        if (purpose == OtpPurpose.PASSWORD_RESET) {
+            rawOtp = String.format("%06d", 100000 + secureRandom.nextInt(900000));
+        } else {
+            rawOtp = String.format("%04d", 1000 + secureRandom.nextInt(9000));
+        }
         String hashedOtp = hashOtp(rawOtp);
 
         OtpVerification verification = new OtpVerification();
@@ -106,10 +116,16 @@ public class OtpService {
 
         otpRepository.save(verification);
 
-        System.out.println(">>> OTP GENERATED FOR EMAIL: [" + cleanEmail + "]");
+        System.out.println(">>> OTP GENERATED FOR EMAIL: [" + cleanEmail + "] (Code: " + rawOtp + ")");
 
-        // Dispatch OTP via Email directly to user.getEmail()
-        emailService.sendOtpEmail(user.getEmail(), rawOtp, purpose.name());
+        // Dispatch OTP via Email with error catching
+        try {
+            emailService.sendOtpEmail(user.getEmail(), rawOtp, purpose.name());
+            log.info("OTP successfully dispatched to " + user.getEmail() + " for purpose " + purpose);
+        } catch (Exception ex) {
+            log.log(Level.SEVERE, "Failed to send OTP email to " + user.getEmail(), ex);
+            System.err.println(">>> FAILED TO SEND OTP EMAIL TO " + user.getEmail() + ": " + ex.getMessage());
+        }
     }
 
     @Transactional
@@ -165,7 +181,7 @@ public class OtpService {
         String cleanOtp = rawOtp.trim();
 
         System.out.println("=================================================");
-        System.out.println(">>> OTP VERIFICATION REQUESTED FOR EMAIL: [" + email + "]");
+        System.out.println(">>> OTP VERIFICATION REQUESTED FOR EMAIL: [" + email + "] (Expected: " + expectedPurpose + ")");
         System.out.println("=================================================");
 
         User user = userRepository.findByEmailIgnoreCase(email)

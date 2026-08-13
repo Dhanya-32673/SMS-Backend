@@ -60,10 +60,13 @@ public class SecurityConfig {
                                 "/health",
                                 "/api/health/**",
                                 "/api/debug/**",
-                                "/api/test-mail/**",
-                                "/api/test-email/**",
-                                "/api/auth/**",
                                 "/api/setup/**",
+                                "/api/test/mail",
+                                "/api/test-mail/**",
+                                "/api/auth/forgot-password",
+                                "/api/auth/verify-reset-otp",
+                                "/api/auth/reset-password",
+                                "/api/auth/**",
                                 "/auth/**",
                                 "/oauth2/**",
                                 "/login/**",
@@ -80,6 +83,11 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     @Bean

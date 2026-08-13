@@ -23,19 +23,16 @@ public class AuthController {
     private final GoogleAuthService googleAuthService;
     private final OtpService otpService;
     private final UserRepository userRepository;
-    private final EmailService emailService;
 
     public AuthController(
             AuthService authService,
             GoogleAuthService googleAuthService,
             OtpService otpService,
-            UserRepository userRepository,
-            EmailService emailService) {
+            UserRepository userRepository) {
         this.authService = authService;
         this.googleAuthService = googleAuthService;
         this.otpService = otpService;
         this.userRepository = userRepository;
-        this.emailService = emailService;
     }
 
         @PostMapping("/admin/login")
@@ -79,35 +76,10 @@ public class AuthController {
                 "message", "OTP sent successfully to " + request.getEmail()));
     }
 
-    @GetMapping({"/test-email", "/test-mail"})
-    public ResponseEntity<String> testEmail(@RequestParam String to) {
-        if (to == null || to.isBlank()) {
-            return ResponseEntity.badRequest().body("Recipient email 'to' parameter is required.");
-        }
-        emailService.sendStandaloneTestEmail(to);
-        return ResponseEntity.ok("Test email dispatched to " + to);
-    }
-
     @PostMapping({ "/verify-login-otp", "/verify-otp", "/otp/verify" })
     public ResponseEntity<LoginResponse> verifyOtp(@Valid @RequestBody OtpVerifyRequest request) {
         LoginResponse response = otpService.verifyLoginOtp(request);
         return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/forgot-password")
-    public ResponseEntity<Map<String, String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        authService.forgotPassword(request);
-        return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Password reset OTP sent to " + request.getEmail()));
-    }
-
-    @PostMapping("/reset-password")
-    public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
-        authService.resetPassword(request);
-        return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Password has been reset successfully. Please login with your new password."));
     }
 
     @PostMapping("/refresh")
