@@ -206,10 +206,10 @@ public class DocumentController {
     }
 
     /**
-     * Verify document (ADMIN ONLY)
+     * Verify document (ADMIN & FACULTY)
      */
     @PatchMapping("/{id}/verify")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
     public ResponseEntity<DocumentResponse> verifyDocument(
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -219,10 +219,10 @@ public class DocumentController {
     }
 
     /**
-     * Reject document (ADMIN ONLY)
+     * Reject document (ADMIN & FACULTY)
      */
     @PatchMapping("/{id}/reject")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
     public ResponseEntity<DocumentResponse> rejectDocument(
             @PathVariable Long id,
             @Valid @RequestBody DocumentRejectionRequest request,
