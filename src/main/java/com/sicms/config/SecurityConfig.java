@@ -2,6 +2,7 @@ package com.sicms.config;
 
 import com.sicms.security.CustomAccessDeniedHandler;
 import com.sicms.security.CustomAuthenticationEntryPoint;
+import com.sicms.security.CustomOAuth2UserService;
 import com.sicms.security.JwtAuthenticationFilter;
 import com.sicms.security.OAuth2AuthenticationFailureHandler;
 import com.sicms.security.OAuth2AuthenticationSuccessHandler;
@@ -30,13 +31,16 @@ public class SecurityConfig {
     private final OAuth2AuthenticationSuccessHandler oAuth2SuccessHandler;
     private final OAuth2AuthenticationFailureHandler oAuth2FailureHandler;
 
+    private final CustomOAuth2UserService customOAuth2UserService;
+
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthFilter,
             CustomAuthenticationEntryPoint customAuthenticationEntryPoint,
             CustomAccessDeniedHandler customAccessDeniedHandler,
             CorsConfigurationSource corsConfigurationSource,
             OAuth2AuthenticationSuccessHandler oAuth2SuccessHandler,
-            OAuth2AuthenticationFailureHandler oAuth2FailureHandler
+            OAuth2AuthenticationFailureHandler oAuth2FailureHandler,
+            CustomOAuth2UserService customOAuth2UserService
     ) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.customAuthenticationEntryPoint = customAuthenticationEntryPoint;
@@ -44,6 +48,7 @@ public class SecurityConfig {
         this.corsConfigurationSource = corsConfigurationSource;
         this.oAuth2SuccessHandler = oAuth2SuccessHandler;
         this.oAuth2FailureHandler = oAuth2FailureHandler;
+        this.customOAuth2UserService = customOAuth2UserService;
     }
 
     @Bean
@@ -104,6 +109,9 @@ public class SecurityConfig {
                         )
                         .redirectionEndpoint(redirection -> redirection
                                 .baseUri("/login/oauth2/code/*")
+                        )
+                        .userInfoEndpoint(userInfo -> userInfo
+                                .userService(customOAuth2UserService)
                         )
                         .successHandler(oAuth2SuccessHandler)
                         .failureHandler(oAuth2FailureHandler)

@@ -30,7 +30,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     private final JwtService jwtService;
     private final OtpService otpService;
 
-    @Value("${app.frontend.url:https://bhashyamgnt.vercel.app}")
+    @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
     public OAuth2AuthenticationSuccessHandler(UserRepository userRepository,

@@ -11,8 +11,8 @@ spring:
       client:
         registration:
           google:
-            client-id: ${GOOGLE_CLIENT_ID:1078205301117-2u5nd4rn8hraa9jjo8hij2r2i0htcsac.apps.googleusercontent.com}
-            client-secret: ${GOOGLE_CLIENT_SECRET:}
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
             scope:
               - email
               - profile
@@ -23,6 +23,7 @@ spring:
             authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
             token-uri: https://oauth2.googleapis.com/token
             user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            user-name-attribute: email
 
 app:
-  frontend-url: ${FRONTEND_URL:https://bhashyamgnt.vercel.app}
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
