@@ -94,7 +94,18 @@ public class FacultyService {
 
     @Transactional(readOnly = true)
     public boolean hasAccessToStudent(Faculty faculty, Student student) {
-        if (faculty == null || student == null || student.getAcademicDetail() == null) {
+        if (faculty == null || student == null) {
+            return false;
+        }
+
+        // 1. Check if student was created by this faculty user
+        if (faculty.getUser() != null && student.getCreatedBy() != null
+                && faculty.getUser().getId().equals(student.getCreatedBy().getId())) {
+            return true;
+        }
+
+        // 2. Check if student belongs to faculty's assigned sections
+        if (student.getAcademicDetail() == null) {
             return false;
         }
 
@@ -106,6 +117,23 @@ public class FacultyService {
                 academicDetail.getSection(),
                 academicDetail.getAcademicYear()
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> getFacultyAssignedSectionFormattedNames(Long facultyId) {
+        if (facultyId == null) {
+            return List.of();
+        }
+
+        return assignmentRepository.findActiveByFacultyId(facultyId).stream()
+                .map(a -> {
+                    String group = a.getBranchGroup() != null ? a.getBranchGroup().trim() : "General";
+                    String sec = a.getSection() != null ? a.getSection().replace("Section ", "").trim() : "A";
+                    return group + "-" + sec;
+                })
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
     }
 
     @CacheEvict(value = {"faculty", "adminDashboard", "sections", "sectionsResponses"}, allEntries = true)

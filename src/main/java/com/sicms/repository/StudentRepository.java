@@ -83,9 +83,10 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     );
 
     @Query(value = "SELECT s FROM Student s JOIN FETCH s.academicDetail a LEFT JOIN FETCH s.contactDetail c WHERE " +
-           "EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
+           "(EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
            "LOWER(fa.branchGroup) = LOWER(a.branchGroup) AND LOWER(fa.intermediateYear) = LOWER(a.intermediateYear) AND " +
-           "LOWER(fa.section) = LOWER(a.section) AND (fa.academicYear IS NULL OR fa.academicYear = '' OR a.academicYear IS NULL OR a.academicYear = '' OR LOWER(fa.academicYear) = LOWER(a.academicYear))) AND " +
+           "LOWER(fa.section) = LOWER(a.section) AND (fa.academicYear IS NULL OR fa.academicYear = '' OR a.academicYear IS NULL OR a.academicYear = '' OR LOWER(fa.academicYear) = LOWER(a.academicYear))) " +
+           "OR (s.createdBy.id = :userId)) AND " +
            "(:department IS NULL OR :department = '' OR LOWER(a.department) = LOWER(:department) OR LOWER(a.branchGroup) = LOWER(:department)) AND " +
            "(:academicYear IS NULL OR :academicYear = '' OR a.academicYear = :academicYear) AND " +
            "(:currentYear IS NULL OR a.semester = :currentYear) AND " +
@@ -99,9 +100,10 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "   LOWER(c.email) LIKE LOWER(CONCAT('%', :search, '%'))" +
            "))",
            countQuery = "SELECT COUNT(s) FROM Student s JOIN s.academicDetail a LEFT JOIN s.contactDetail c WHERE " +
-           "EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
+           "(EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
            "LOWER(fa.branchGroup) = LOWER(a.branchGroup) AND LOWER(fa.intermediateYear) = LOWER(a.intermediateYear) AND " +
-           "LOWER(fa.section) = LOWER(a.section) AND (fa.academicYear IS NULL OR fa.academicYear = '' OR a.academicYear IS NULL OR a.academicYear = '' OR LOWER(fa.academicYear) = LOWER(a.academicYear))) AND " +
+           "LOWER(fa.section) = LOWER(a.section) AND (fa.academicYear IS NULL OR fa.academicYear = '' OR a.academicYear IS NULL OR a.academicYear = '' OR LOWER(fa.academicYear) = LOWER(a.academicYear))) " +
+           "OR (s.createdBy.id = :userId)) AND " +
            "(:department IS NULL OR :department = '' OR LOWER(a.department) = LOWER(:department) OR LOWER(a.branchGroup) = LOWER(:department)) AND " +
            "(:academicYear IS NULL OR :academicYear = '' OR a.academicYear = :academicYear) AND " +
            "(:currentYear IS NULL OR a.semester = :currentYear) AND " +
@@ -116,6 +118,7 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "))")
     Page<Student> filterAndSearchStudentsForFaculty(
             @Param("facultyId") Long facultyId,
+            @Param("userId") Long userId,
             @Param("department") String department,
             @Param("academicYear") String academicYear,
             @Param("currentYear") Integer currentYear,
@@ -135,16 +138,24 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     List<Student> searchByQuery(@Param("query") String query);
 
     @Query("SELECT s FROM Student s LEFT JOIN s.academicDetail a LEFT JOIN s.contactDetail c WHERE " +
-           "EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
+           "(EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
            "LOWER(fa.branchGroup) = LOWER(a.branchGroup) AND LOWER(fa.intermediateYear) = LOWER(a.intermediateYear) AND " +
-           "LOWER(fa.section) = LOWER(a.section) AND (fa.academicYear IS NULL OR fa.academicYear = '' OR a.academicYear IS NULL OR a.academicYear = '' OR LOWER(fa.academicYear) = LOWER(a.academicYear))) AND (" +
+           "LOWER(fa.section) = LOWER(a.section) AND (fa.academicYear IS NULL OR fa.academicYear = '' OR a.academicYear IS NULL OR a.academicYear = '' OR LOWER(fa.academicYear) = LOWER(a.academicYear))) " +
+           "OR (s.createdBy.id = :userId)) AND (" +
            "LOWER(s.studentId) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
            "LOWER(s.rollNumber) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
            "LOWER(s.admissionNumber) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
            "LOWER(s.fullName) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
            "LOWER(c.email) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
            "LOWER(a.branchGroup) LIKE LOWER(CONCAT('%', :query, '%')))")
-    List<Student> searchByQueryForFaculty(@Param("query") String query, @Param("facultyId") Long facultyId);
+    List<Student> searchByQueryForFaculty(@Param("query") String query, @Param("facultyId") Long facultyId, @Param("userId") Long userId);
+
+    @Query("SELECT s FROM Student s JOIN FETCH s.academicDetail a WHERE " +
+           "(EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
+           "LOWER(fa.branchGroup) = LOWER(a.branchGroup) AND LOWER(fa.intermediateYear) = LOWER(a.intermediateYear) AND " +
+           "LOWER(fa.section) = LOWER(a.section) AND (fa.academicYear IS NULL OR fa.academicYear = '' OR a.academicYear IS NULL OR a.academicYear = '' OR LOWER(fa.academicYear) = LOWER(a.academicYear))) " +
+           "OR (s.createdBy.id = :userId))")
+    List<Student> findAccessibleStudentsByFaculty(@Param("facultyId") Long facultyId, @Param("userId") Long userId);
 
     @Query("SELECT s FROM Student s JOIN FETCH s.academicDetail a WHERE EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
            "LOWER(fa.branchGroup) = LOWER(a.branchGroup) AND LOWER(fa.intermediateYear) = LOWER(a.intermediateYear) AND " +
@@ -153,10 +164,12 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
 
     List<Student> findTop5ByOrderByIdDesc();
 
-    @Query("SELECT s FROM Student s JOIN s.academicDetail a WHERE LOWER(s.studentId) = LOWER(:studentId) AND EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
+    @Query("SELECT s FROM Student s JOIN s.academicDetail a WHERE LOWER(s.studentId) = LOWER(:studentId) AND (" +
+           "EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
            "LOWER(fa.branchGroup) = LOWER(a.branchGroup) AND LOWER(fa.intermediateYear) = LOWER(a.intermediateYear) AND " +
-           "LOWER(fa.section) = LOWER(a.section) AND (fa.academicYear IS NULL OR fa.academicYear = '' OR a.academicYear IS NULL OR a.academicYear = '' OR LOWER(fa.academicYear) = LOWER(a.academicYear)))")
-    Optional<Student> findAccessibleStudentByFaculty(@Param("studentId") String studentId, @Param("facultyId") Long facultyId);
+           "LOWER(fa.section) = LOWER(a.section) AND (fa.academicYear IS NULL OR fa.academicYear = '' OR a.academicYear IS NULL OR a.academicYear = '' OR LOWER(fa.academicYear) = LOWER(a.academicYear))) " +
+           "OR (s.createdBy.id = :userId))")
+    Optional<Student> findAccessibleStudentByFaculty(@Param("studentId") String studentId, @Param("facultyId") Long facultyId, @Param("userId") Long userId);
 
     long countByAcademicDetail_SectionIgnoreCase(String section);
 
@@ -201,4 +214,17 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "LEFT JOIN FETCH s.createdBy u " +
            "ORDER BY s.id ASC")
     List<Student> findAllForExcelExport();
+
+    @Query("SELECT DISTINCT s FROM Student s " +
+           "LEFT JOIN FETCH s.academicDetail a " +
+           "LEFT JOIN FETCH s.contactDetail c " +
+           "LEFT JOIN FETCH s.parentDetail p " +
+           "LEFT JOIN FETCH s.guardianDetail g " +
+           "LEFT JOIN FETCH s.createdBy u " +
+           "WHERE (EXISTS (SELECT fa.id FROM FacultyAssignment fa WHERE fa.faculty.id = :facultyId AND fa.active = true AND " +
+           "LOWER(fa.branchGroup) = LOWER(a.branchGroup) AND LOWER(fa.intermediateYear) = LOWER(a.intermediateYear) AND " +
+           "LOWER(fa.section) = LOWER(a.section) AND (fa.academicYear IS NULL OR fa.academicYear = '' OR a.academicYear IS NULL OR a.academicYear = '' OR LOWER(fa.academicYear) = LOWER(a.academicYear))) " +
+           "OR (s.createdBy.id = :userId)) " +
+           "ORDER BY s.id ASC")
+    List<Student> findAccessibleStudentsForFacultyExport(@Param("facultyId") Long facultyId, @Param("userId") Long userId);
 }

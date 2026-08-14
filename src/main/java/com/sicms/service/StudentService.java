@@ -2,10 +2,13 @@ package com.sicms.service;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import com.sicms.entity.User;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -37,6 +40,8 @@ import com.sicms.exception.DuplicateResourceException;
 import com.sicms.exception.StudentNotFoundException;
 import com.sicms.repository.DocumentTypeRepository;
 import com.sicms.repository.StudentDocumentRepository;
+import com.sicms.entity.ExportAuditLog;
+import com.sicms.repository.ExportAuditLogRepository;
 import com.sicms.repository.StudentRepository;
 import com.sicms.repository.UserRepository;
 import com.sicms.repository.DocumentVersionRepository;
@@ -56,6 +61,7 @@ public class StudentService {
     private final FacultyService facultyService;
     private final StudentPhotoService photoService;
     private final DocumentTypeRepository documentTypeRepository;
+    private final ExportAuditLogRepository exportAuditLogRepository;
 
     @Autowired
     public StudentService(
@@ -68,7 +74,8 @@ public class StudentService {
             DocumentStorageService documentStorageService,
             FacultyService facultyService,
             StudentPhotoService photoService,
-            DocumentTypeRepository documentTypeRepository
+            DocumentTypeRepository documentTypeRepository,
+            ExportAuditLogRepository exportAuditLogRepository
     ) {
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
@@ -80,6 +87,7 @@ public class StudentService {
         this.facultyService = facultyService;
         this.photoService = photoService;
         this.documentTypeRepository = documentTypeRepository;
+        this.exportAuditLogRepository = exportAuditLogRepository;
     }
 
     @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
@@ -188,8 +196,10 @@ public class StudentService {
         Page<Student> studentPage;
         if (facultyScoped) {
             Faculty faculty = facultyService.getFacultyByUserEmail(currentUserEmail);
+            User user = userRepository.findByEmailIgnoreCase(currentUserEmail).orElse(null);
+            Long userId = user != null ? user.getId() : -1L;
             studentPage = studentRepository.filterAndSearchStudentsForFaculty(
-                faculty.getId(), department, academicYear, currentYear, section, status, search, pageable
+                faculty.getId(), userId, department, academicYear, currentYear, section, status, search, pageable
             );
         } else {
             studentPage = studentRepository.filterAndSearchStudents(
@@ -345,7 +355,9 @@ public class StudentService {
         List<Student> results;
         if (facultyScoped) {
             Faculty faculty = facultyService.getFacultyByUserEmail(currentUserEmail);
-            results = studentRepository.searchByQueryForFaculty(cleanQuery, faculty.getId());
+            User user = userRepository.findByEmailIgnoreCase(currentUserEmail).orElse(null);
+            Long userId = user != null ? user.getId() : -1L;
+            results = studentRepository.searchByQueryForFaculty(cleanQuery, faculty.getId(), userId);
         } else {
             results = studentRepository.searchByQuery(cleanQuery);
         }
@@ -464,12 +476,55 @@ public class StudentService {
         }
     }
 
-    /**
-     * ADMIN ONLY: Export all students with complete dataset directly to output stream as Excel (.xlsx)
-     */
     @Transactional(readOnly = true)
-    public void exportStudentsToExcel(OutputStream outputStream) throws IOException {
-        List<Student> students = studentRepository.findAllForExcelExport();
+    public String determineExportFilename(String currentUserEmail, boolean isFaculty) {
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy_MM_dd"));
+        if (!isFaculty) {
+            return "All_Students_" + today + ".xlsx";
+        }
+
+        Faculty faculty = facultyService.findFacultyByUserEmail(currentUserEmail).orElse(null);
+        if (faculty == null) {
+            return "Assigned_Students.xlsx";
+        }
+
+        List<String> sectionNames = facultyService.getFacultyAssignedSectionFormattedNames(faculty.getId());
+        if (sectionNames == null || sectionNames.isEmpty()) {
+            return "Assigned_Students.xlsx";
+        }
+
+        String rawName = String.join("_", sectionNames) + "_Students.xlsx";
+        return rawName.replaceAll("[^a-zA-Z0-9_.-]", "_");
+    }
+
+    /**
+     * Export permitted students directly to output stream as Excel (.xlsx) with Audit Logging.
+     */
+    @Transactional
+    public void exportStudentsToExcel(OutputStream outputStream, String currentUserEmail, boolean isFaculty, String ipAddress) throws IOException {
+        List<Student> students;
+        String sectionNamesStr = "ALL";
+        Long userId = null;
+        String role = isFaculty ? "ROLE_FACULTY" : "ROLE_ADMIN";
+
+        User currentUser = currentUserEmail != null ? userRepository.findByEmailIgnoreCase(currentUserEmail).orElse(null) : null;
+        if (currentUser != null) {
+            userId = currentUser.getId();
+            if (currentUser.getRole() != null && currentUser.getRole().getRoleName() != null) {
+                role = currentUser.getRole().getRoleName();
+            }
+        }
+
+        if (isFaculty) {
+            Faculty faculty = facultyService.getFacultyByUserEmail(currentUserEmail);
+            Long facultyUserId = currentUser != null ? currentUser.getId() : -1L;
+            students = studentRepository.findAccessibleStudentsForFacultyExport(faculty.getId(), facultyUserId);
+            List<String> assignedSections = facultyService.getFacultyAssignedSectionFormattedNames(faculty.getId());
+            sectionNamesStr = (assignedSections != null && !assignedSections.isEmpty()) ? String.join(", ", assignedSections) : "Self-Created";
+        } else {
+            students = studentRepository.findAllForExcelExport();
+        }
+
         List<StudentDocument> allDocs = documentRepository.findAllWithStudentAndType();
         Map<String, List<StudentDocument>> studentDocsMap = allDocs.stream()
                 .filter(d -> d.getStudent() != null && d.getStudent().getStudentId() != null)
@@ -477,5 +532,20 @@ public class StudentService {
         List<DocumentType> requiredTypes = documentTypeRepository.findByActiveTrue();
 
         StudentExcelExporter.exportToStream(students, studentDocsMap, requiredTypes, outputStream);
+
+        // Audit Logging
+        try {
+            ExportAuditLog auditLog = new ExportAuditLog(
+                    userId,
+                    currentUserEmail,
+                    role,
+                    sectionNamesStr,
+                    students.size(),
+                    ipAddress
+            );
+            exportAuditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            System.err.println("Failed to save export audit log: " + e.getMessage());
+        }
     }
 }
