@@ -27,6 +27,7 @@ import com.sicms.entity.FacultyAssignment;
 import com.sicms.entity.Role;
 import com.sicms.entity.Student;
 import com.sicms.entity.StudentAcademicDetail;
+import com.sicms.entity.User;
 import com.sicms.repository.FacultyAssignmentRepository;
 import com.sicms.repository.FacultyRepository;
 import com.sicms.repository.RoleRepository;

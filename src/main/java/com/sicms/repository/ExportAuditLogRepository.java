@@ -14,6 +14,6 @@ public interface ExportAuditLogRepository extends JpaRepository<ExportAuditLog, 
     List<ExportAuditLog> findTop20ByOrderByCreatedAtDesc();
 
     @Modifying
-    @Query("UPDATE ExportAuditLog e SET e.user = null WHERE e.user.id = :userId")
+    @Query(value = "UPDATE export_audit_logs SET user_id = NULL WHERE user_id = :userId", nativeQuery = true)
     void clearUserReferences(@Param("userId") Long userId);
 }

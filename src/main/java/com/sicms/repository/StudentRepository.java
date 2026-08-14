@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -229,6 +230,6 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     List<Student> findAccessibleStudentsForFacultyExport(@Param("facultyId") Long facultyId, @Param("userId") Long userId);
 
     @Modifying
-    @Query("UPDATE Student s SET s.createdBy = null WHERE s.createdBy.id = :userId")
+    @Query(value = "UPDATE students SET created_by_id = NULL WHERE created_by_id = :userId", nativeQuery = true)
     void clearCreatedByForUser(@Param("userId") Long userId);
 }
