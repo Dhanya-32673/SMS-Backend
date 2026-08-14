@@ -27,11 +27,14 @@ import com.sicms.entity.FacultyAssignment;
 import com.sicms.entity.Role;
 import com.sicms.entity.Student;
 import com.sicms.entity.StudentAcademicDetail;
-import com.sicms.entity.User;
 import com.sicms.repository.FacultyAssignmentRepository;
 import com.sicms.repository.FacultyRepository;
 import com.sicms.repository.RoleRepository;
 import com.sicms.repository.UserRepository;
+import com.sicms.repository.StudentRepository;
+import com.sicms.repository.ExportAuditLogRepository;
+import com.sicms.repository.RefreshTokenRepository;
+import com.sicms.repository.PasswordResetOtpRepository;
 
 @Service
 public class FacultyService {
@@ -42,19 +45,31 @@ public class FacultyService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final StudentPhotoService photoService;
+    private final StudentRepository studentRepository;
+    private final ExportAuditLogRepository exportAuditLogRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final PasswordResetOtpRepository passwordResetOtpRepository;
 
     public FacultyService(FacultyRepository facultyRepository,
                           FacultyAssignmentRepository assignmentRepository,
                           UserRepository userRepository,
                           RoleRepository roleRepository,
                           PasswordEncoder passwordEncoder,
-                          StudentPhotoService photoService) {
+                          StudentPhotoService photoService,
+                          StudentRepository studentRepository,
+                          ExportAuditLogRepository exportAuditLogRepository,
+                          RefreshTokenRepository refreshTokenRepository,
+                          PasswordResetOtpRepository passwordResetOtpRepository) {
         this.facultyRepository = facultyRepository;
         this.assignmentRepository = assignmentRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.photoService = photoService;
+        this.studentRepository = studentRepository;
+        this.exportAuditLogRepository = exportAuditLogRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.passwordResetOtpRepository = passwordResetOtpRepository;
     }
 
     @Transactional(readOnly = true)
@@ -333,8 +348,14 @@ public class FacultyService {
 
     @Transactional
     public void deleteFaculty(Long id) {
-        Faculty faculty = facultyRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Faculty not found with ID: " + id));
+        if (id == null) return;
+        Optional<Faculty> optionalFaculty = facultyRepository.findById(id);
+        if (optionalFaculty.isEmpty()) {
+            System.out.println(">>> Faculty with ID " + id + " does not exist or was already deleted.");
+            return;
+        }
+
+        Faculty faculty = optionalFaculty.get();
 
         // 1. Delete all assignments
         List<FacultyAssignment> assignments = assignmentRepository.findByFacultyId(faculty.getId());
@@ -353,10 +374,34 @@ public class FacultyService {
 
         User user = faculty.getUser();
 
-        // 3. Delete faculty entity
+        // 3. Clear associations referencing this user to avoid FK violations
+        if (user != null) {
+            try {
+                studentRepository.clearCreatedByForUser(user.getId());
+            } catch (Exception e) {
+                System.err.println(">>> Notice: could not clear student createdBy references: " + e.getMessage());
+            }
+            try {
+                exportAuditLogRepository.clearUserReferences(user.getId());
+            } catch (Exception e) {
+                System.err.println(">>> Notice: could not clear audit log references: " + e.getMessage());
+            }
+            try {
+                refreshTokenRepository.deleteByUser(user);
+            } catch (Exception e) {
+                System.err.println(">>> Notice: could not delete refresh tokens: " + e.getMessage());
+            }
+            try {
+                passwordResetOtpRepository.deleteByUser(user);
+            } catch (Exception e) {
+                System.err.println(">>> Notice: could not delete password reset otps: " + e.getMessage());
+            }
+        }
+
+        // 4. Delete faculty entity
         facultyRepository.delete(faculty);
 
-        // 4. Delete user account
+        // 5. Delete user account
         if (user != null) {
             userRepository.delete(user);
         }

@@ -227,4 +227,8 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "OR (s.createdBy.id = :userId)) " +
            "ORDER BY s.id ASC")
     List<Student> findAccessibleStudentsForFacultyExport(@Param("facultyId") Long facultyId, @Param("userId") Long userId);
+
+    @Modifying
+    @Query("UPDATE Student s SET s.createdBy = null WHERE s.createdBy.id = :userId")
+    void clearCreatedByForUser(@Param("userId") Long userId);
 }

@@ -27,4 +27,8 @@ public interface PasswordResetOtpRepository extends JpaRepository<PasswordResetO
     @Modifying
     @Query("DELETE FROM PasswordResetOtp o WHERE o.expiresAt < :now OR o.used = true")
     int deleteExpiredOrUsedOtps(@Param("now") Instant now);
+
+    @Modifying
+    @Query("DELETE FROM PasswordResetOtp o WHERE o.user = :user")
+    void deleteByUser(@Param("user") User user);
 }
