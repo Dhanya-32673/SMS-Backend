@@ -192,4 +192,13 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "WHERE s.status = com.sicms.entity.StudentStatus.ACTIVE AND a.section IS NOT NULL " +
            "GROUP BY LOWER(COALESCE(a.branchGroup, '')), LOWER(COALESCE(a.intermediateYear, '')), LOWER(a.section)")
     List<Object[]> countStudentsGroupedBySection();
+
+    @Query("SELECT DISTINCT s FROM Student s " +
+           "LEFT JOIN FETCH s.academicDetail a " +
+           "LEFT JOIN FETCH s.contactDetail c " +
+           "LEFT JOIN FETCH s.parentDetail p " +
+           "LEFT JOIN FETCH s.guardianDetail g " +
+           "LEFT JOIN FETCH s.createdBy u " +
+           "ORDER BY s.id ASC")
+    List<Student> findAllForExcelExport();
 }

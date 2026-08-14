@@ -133,4 +133,7 @@ public interface StudentDocumentRepository extends JpaRepository<StudentDocument
         List<StudentDocument> findDocumentsForFacultyScope(@Param("facultyId") Long facultyId);
 
         Page<StudentDocument> findByStatus(DocumentStatus status, Pageable pageable);
+
+        @Query("SELECT d FROM StudentDocument d JOIN FETCH d.student s JOIN FETCH d.documentType dt")
+        List<StudentDocument> findAllWithStudentAndType();
 }

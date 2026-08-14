@@ -1,7 +1,11 @@
 package com.sicms.service;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -21,6 +25,7 @@ import com.sicms.dto.StudentResponse;
 import com.sicms.dto.StudentSearchResponse;
 import com.sicms.dto.StudentSummaryResponse;
 import com.sicms.dto.UpdateStudentRequest;
+import com.sicms.entity.DocumentType;
 import com.sicms.entity.Faculty;
 import com.sicms.entity.Student;
 import com.sicms.entity.StudentAcademicDetail;
@@ -30,11 +35,13 @@ import com.sicms.entity.StudentParentDetail;
 import com.sicms.entity.StudentStatus;
 import com.sicms.exception.DuplicateResourceException;
 import com.sicms.exception.StudentNotFoundException;
+import com.sicms.repository.DocumentTypeRepository;
 import com.sicms.repository.StudentDocumentRepository;
 import com.sicms.repository.StudentRepository;
 import com.sicms.repository.UserRepository;
 import com.sicms.repository.DocumentVersionRepository;
 import com.sicms.entity.DocumentVersion;
+import com.sicms.util.StudentExcelExporter;
 
 @Service
 public class StudentService {
@@ -48,6 +55,7 @@ public class StudentService {
     private final DocumentStorageService documentStorageService;
     private final FacultyService facultyService;
     private final StudentPhotoService photoService;
+    private final DocumentTypeRepository documentTypeRepository;
 
     @Autowired
     public StudentService(
@@ -59,7 +67,8 @@ public class StudentService {
             DocumentVersionRepository documentVersionRepository,
             DocumentStorageService documentStorageService,
             FacultyService facultyService,
-            StudentPhotoService photoService
+            StudentPhotoService photoService,
+            DocumentTypeRepository documentTypeRepository
     ) {
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
@@ -70,6 +79,7 @@ public class StudentService {
         this.documentStorageService = documentStorageService;
         this.facultyService = facultyService;
         this.photoService = photoService;
+        this.documentTypeRepository = documentTypeRepository;
     }
 
     @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
@@ -452,5 +462,20 @@ public class StudentService {
         if (!facultyService.hasAccessToAcademicScope(faculty, branchGroup, intermediateYear, section, academicYear)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Faculty can only create students in assigned sections.");
         }
+    }
+
+    /**
+     * ADMIN ONLY: Export all students with complete dataset directly to output stream as Excel (.xlsx)
+     */
+    @Transactional(readOnly = true)
+    public void exportStudentsToExcel(OutputStream outputStream) throws IOException {
+        List<Student> students = studentRepository.findAllForExcelExport();
+        List<StudentDocument> allDocs = documentRepository.findAllWithStudentAndType();
+        Map<String, List<StudentDocument>> studentDocsMap = allDocs.stream()
+                .filter(d -> d.getStudent() != null && d.getStudent().getStudentId() != null)
+                .collect(Collectors.groupingBy(d -> d.getStudent().getStudentId()));
+        List<DocumentType> requiredTypes = documentTypeRepository.findByActiveTrue();
+
+        StudentExcelExporter.exportToStream(students, studentDocsMap, requiredTypes, outputStream);
     }
 }

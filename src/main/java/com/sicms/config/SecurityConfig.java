@@ -75,7 +75,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/admin/faculty/reset-password",
                                 "/admin/faculty/reset-password"
-                        ).hasAuthority("ROLE_ADMIN")
+                        ).hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ADMIN", "SUPER_ADMIN")
                         .requestMatchers(
                                 "/",
                                 "/health",
@@ -97,10 +97,10 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/h2-console/**"
                         ).permitAll()
-                        .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
-                        .requestMatchers("/api/dashboard/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_FACULTY")
-                        .requestMatchers("/api/faculty/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_FACULTY")
-                        .requestMatchers("/api/documents/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_FACULTY")
+                        .requestMatchers("/api/admin/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ADMIN", "SUPER_ADMIN")
+                        .requestMatchers("/api/dashboard/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_FACULTY", "ADMIN", "SUPER_ADMIN", "FACULTY")
+                        .requestMatchers("/api/faculty/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_FACULTY", "ADMIN", "SUPER_ADMIN", "FACULTY")
+                        .requestMatchers("/api/documents/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_FACULTY", "ADMIN", "SUPER_ADMIN", "FACULTY")
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2
