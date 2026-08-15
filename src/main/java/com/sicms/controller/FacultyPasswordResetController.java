@@ -38,10 +38,14 @@ public class FacultyPasswordResetController {
 
     /**
      * Step 3: Admin enters OTP received in email and updates faculty password.
-     * Requires ROLE_ADMIN authority.
+     * Public endpoint verified via valid 6-digit OTP code sent exclusively to Admin email.
      */
-    @PostMapping({"/api/admin/faculty/reset-password", "/admin/faculty/reset-password"})
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @PostMapping({
+            "/api/auth/faculty/reset-password",
+            "/auth/faculty/reset-password",
+            "/api/admin/faculty/reset-password",
+            "/admin/faculty/reset-password"
+    })
     public ResponseEntity<Map<String, String>> adminResetFacultyPassword(
             @Valid @RequestBody AdminFacultyResetPasswordRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails,
