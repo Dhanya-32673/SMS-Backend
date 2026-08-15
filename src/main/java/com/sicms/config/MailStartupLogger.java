@@ -22,7 +22,7 @@ public class MailStartupLogger implements CommandLineRunner {
     @Value("${spring.datasource.username:postgres}")
     private String dbUsername;
 
-    @Value("${resend.api.key:your_resend_api_key_here}")
+    @Value("${resend.api.key:}")
     private String resendApiKey;
 
     @Value("${app.mail.from:onboarding@resend.dev}")

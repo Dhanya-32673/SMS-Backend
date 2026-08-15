@@ -47,7 +47,7 @@ public class FacultyPasswordResetController {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             Principal principal
     ) {
-        String adminEmail = userDetails != null ? userDetails.getEmail() : (principal != null ? principal.getName() : "admin@college.edu");
+        String adminEmail = userDetails != null ? userDetails.getEmail() : (principal != null ? principal.getName() : "bhashyamgnt.edu@gmail.com");
         Map<String, String> response = facultyPasswordResetService.adminResetFacultyPassword(request, adminEmail);
         return ResponseEntity.ok(response);
     }

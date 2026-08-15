@@ -26,6 +26,9 @@ public class OAuth2Controller {
     @Value("${app.frontend.url:https://bhashyamgnt.vercel.app}")
     private String frontendUrl;
 
+    @Value("${app.admin.email:bhashyamgnt.edu@gmail.com}")
+    private String adminEmail;
+
     public OAuth2Controller(UserRepository userRepository, JwtService jwtService) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
@@ -54,8 +57,8 @@ public class OAuth2Controller {
             return;
         }
 
-        // Fallback for Development/Testing: authenticate admin@sicms.edu
-        Optional<User> userOpt = userRepository.findByEmailIgnoreCase("admin@sicms.edu");
+        // Fallback for Development/Testing: authenticate admin email
+        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(adminEmail);
         if (userOpt.isPresent()) {
             User user = userOpt.get();
             String token = jwtService.generateAccessToken(user);

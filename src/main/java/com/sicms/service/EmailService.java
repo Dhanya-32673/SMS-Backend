@@ -30,9 +30,9 @@ public class EmailService {
     private JavaMailSender javaMailSender;
 
     public EmailService(
-            @Value("${resend.api.key:your_resend_api_key_here}") String apiKey,
+            @Value("${resend.api.key:}") String apiKey,
             @Value("${app.mail.from:onboarding@resend.dev}") String fromAddress,
-            @Value("${app.admin.email:admin@college.edu}") String adminEmail
+            @Value("${app.admin.email:bhashyamgnt.edu@gmail.com}") String adminEmail
     ) {
         this.apiKey = apiKey != null ? apiKey.trim() : "";
         this.fromAddress = (fromAddress != null && !fromAddress.isBlank()) ? fromAddress.trim() : "onboarding@resend.dev";

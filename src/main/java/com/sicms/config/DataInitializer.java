@@ -13,19 +13,28 @@ public class DataInitializer implements CommandLineRunner {
     private final AcademicGroupRepository groupRepository;
     private final AcademicSectionRepository sectionRepository;
     private final DocumentTypeRepository documentTypeRepository;
+    private final UserRepository userRepository;
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     private final javax.sql.DataSource dataSource;
+
+    @org.springframework.beans.factory.annotation.Value("${app.admin.email:bhashyamgnt.edu@gmail.com}")
+    private String adminEmail;
 
     public DataInitializer(RoleRepository roleRepository,
                            PermissionRepository permissionRepository,
                            AcademicGroupRepository groupRepository,
                            AcademicSectionRepository sectionRepository,
                            DocumentTypeRepository documentTypeRepository,
+                           UserRepository userRepository,
+                           org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                            javax.sql.DataSource dataSource) {
         this.roleRepository = roleRepository;
         this.permissionRepository = permissionRepository;
         this.groupRepository = groupRepository;
         this.sectionRepository = sectionRepository;
         this.documentTypeRepository = documentTypeRepository;
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
         this.dataSource = dataSource;
     }
 
@@ -100,9 +109,55 @@ public class DataInitializer implements CommandLineRunner {
             System.err.println("Document types warning: " + e.getMessage());
         }
 
-        System.out.println("No default users created");
+        // === 5. Admin User ===
+        try {
+            seedAdminUser(adminEmail);
+        } catch (Exception e) {
+            System.err.println("Admin user initialization warning: " + e.getMessage());
+        }
+
         System.out.println("Application startup completed successfully");
         System.out.println("=================================");
+    }
+
+    private void seedAdminUser(String email) {
+        if (email == null || email.isBlank()) return;
+        String cleanEmail = email.trim().toLowerCase();
+        Role adminRole = roleRepository.findByRoleName("ROLE_ADMIN")
+                .orElseGet(() -> roleRepository.save(new Role("ROLE_ADMIN", "System Administrator")));
+
+        java.util.Optional<User> existingUser = userRepository.findByEmailIgnoreCase(cleanEmail);
+        if (existingUser.isEmpty()) {
+            User admin = new User();
+            admin.setFullName("Bhashyam Administrator");
+            admin.setEmail(cleanEmail);
+            admin.setPasswordHash(passwordEncoder.encode("Admin@123"));
+            admin.setRole(adminRole);
+            admin.setAuthProvider(AuthProvider.LOCAL);
+            admin.setEmailVerified(true);
+            admin.setAccountEnabled(true);
+            userRepository.save(admin);
+            System.out.println("Default Admin user created: " + cleanEmail);
+        } else {
+            User user = existingUser.get();
+            boolean updated = false;
+            if (user.getRole() == null || !"ROLE_ADMIN".equalsIgnoreCase(user.getRole().getRoleName())) {
+                user.setRole(adminRole);
+                updated = true;
+            }
+            if (!Boolean.TRUE.equals(user.getEmailVerified())) {
+                user.setEmailVerified(true);
+                updated = true;
+            }
+            if (!Boolean.TRUE.equals(user.getAccountEnabled())) {
+                user.setAccountEnabled(true);
+                updated = true;
+            }
+            if (updated) {
+                userRepository.save(user);
+                System.out.println("Admin user updated with ROLE_ADMIN: " + cleanEmail);
+            }
+        }
     }
 
     private void seedRole(String name, String desc) {
