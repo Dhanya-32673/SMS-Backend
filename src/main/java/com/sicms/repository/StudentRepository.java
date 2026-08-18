@@ -230,6 +230,6 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     List<Student> findAccessibleStudentsForFacultyExport(@Param("facultyId") Long facultyId, @Param("userId") Long userId);
 
     @Modifying
-    @Query(value = "UPDATE students SET created_by_id = NULL WHERE created_by_id = :userId", nativeQuery = true)
+    @Query(value = "UPDATE students SET created_by = NULL WHERE created_by = :userId", nativeQuery = true)
     void clearCreatedByForUser(@Param("userId") Long userId);
 }
