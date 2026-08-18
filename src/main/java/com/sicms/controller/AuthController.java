@@ -29,33 +29,27 @@ public class AuthController {
         this.googleAuthService = googleAuthService;
     }
 
-    @PostMapping("/admin/login")
+    @PostMapping({"/admin/login", "/login"})
     public ResponseEntity<LoginInitiatedResponse> adminLogin(@Valid @RequestBody LoginRequest request) {
         LoginInitiatedResponse response = authService.adminLogin(request);
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/admin/verify-otp")
+    @PostMapping({"/admin/verify-otp", "/verify-otp", "/verify-login-otp", "/otp/verify"})
     public ResponseEntity<LoginVerifyResponse> verifyAdminOtp(@Valid @RequestBody OtpVerifyRequest request) {
         LoginVerifyResponse response = authService.verifyAdminOtp(request);
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/admin/send-otp")
+    @PostMapping({"/admin/send-otp", "/send-login-otp", "/resend-otp", "/otp/send"})
     public ResponseEntity<Map<String, String>> sendAdminOtp(@Valid @RequestBody ResendOtpRequest request) {
         authService.resendOtp(request);
-        return ResponseEntity.ok(Map.of("message", "Admin OTP sent successfully"));
+        return ResponseEntity.ok(Map.of("message", "OTP sent successfully"));
     }
 
     @PostMapping("/faculty/login")
     public ResponseEntity<LoginVerifyResponse> facultyLogin(@Valid @RequestBody LoginRequest request) {
         LoginVerifyResponse response = authService.facultyLogin(request);
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/login")
-    public ResponseEntity<LoginInitiatedResponse> login(@Valid @RequestBody LoginRequest request) {
-        LoginInitiatedResponse response = authService.login(request);
         return ResponseEntity.ok(response);
     }
 
@@ -73,16 +67,13 @@ public class AuthController {
         ));
     }
 
-    @PostMapping("/verify-otp")
-    public ResponseEntity<LoginVerifyResponse> verifyOtp(@Valid @RequestBody OtpVerifyRequest request) {
-        LoginVerifyResponse response = authService.verifyOtp(request);
+    @PostMapping("/refresh")
+    public ResponseEntity<LoginVerifyResponse> refreshToken(@RequestBody RefreshTokenRequest request) {
+        if (request == null || request.getRefreshToken() == null || request.getRefreshToken().isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        LoginVerifyResponse response = authService.refreshAccessToken(request.getRefreshToken());
         return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/resend-otp")
-    public ResponseEntity<Map<String, String>> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
-        authService.resendOtp(request);
-        return ResponseEntity.ok(Map.of("message", "OTP sent successfully"));
     }
 
     @PostMapping("/logout")

@@ -64,9 +64,7 @@ public class EmailService {
         try {
             sendOtpEmailSync(toEmail, otpCode, purpose);
         } catch (Exception e) {
-            log.log(Level.WARNING, ">>> OTP DISPATCH WARNING for [" + toEmail + "]: " + e.getMessage(), e);
-            System.err.println(">>> OTP DISPATCH WARNING for [" + toEmail + "]: " + e.getMessage());
-            System.out.println(">>> OTP DISPATCH CODE FOR [" + toEmail + "]: [ " + otpCode + " ]");
+            log.log(Level.WARNING, ">>> OTP DISPATCH WARNING for [" + toEmail + "]: " + e.getMessage());
         }
     }
 
@@ -207,7 +205,8 @@ public class EmailService {
 
         try {
             if (apiKey.isEmpty() || apiKey.contains("your_resend_api_key")) {
-                throw new IllegalStateException("RESEND_API_KEY is not configured in environment.");
+                log.warning("No email dispatch provider available (Resend API key missing and SMTP unavailable). OTP stored in DB.");
+                return;
             }
 
             Resend resend = new Resend(apiKey);
@@ -221,7 +220,7 @@ public class EmailService {
             CreateEmailResponse data = resend.emails().send(params);
             log.info("Resend API email dispatch successful to " + email + " [ID: " + (data != null ? data.getId() : "OK") + "]");
         } catch (Exception e) {
-            log.log(Level.SEVERE, "Email dispatch failure for [" + email + "]: " + e.getMessage(), e);
+            log.log(Level.WARNING, "Email dispatch warning for [" + email + "]: " + e.getMessage());
         }
     }
 }

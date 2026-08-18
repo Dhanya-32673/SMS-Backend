@@ -14,6 +14,7 @@ public class DataInitializer implements CommandLineRunner {
     private final AcademicSectionRepository sectionRepository;
     private final DocumentTypeRepository documentTypeRepository;
     private final UserRepository userRepository;
+    private final FacultyRepository facultyRepository;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     private final javax.sql.DataSource dataSource;
 
@@ -26,6 +27,7 @@ public class DataInitializer implements CommandLineRunner {
                            AcademicSectionRepository sectionRepository,
                            DocumentTypeRepository documentTypeRepository,
                            UserRepository userRepository,
+                           FacultyRepository facultyRepository,
                            org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                            javax.sql.DataSource dataSource) {
         this.roleRepository = roleRepository;
@@ -34,6 +36,7 @@ public class DataInitializer implements CommandLineRunner {
         this.sectionRepository = sectionRepository;
         this.documentTypeRepository = documentTypeRepository;
         this.userRepository = userRepository;
+        this.facultyRepository = facultyRepository;
         this.passwordEncoder = passwordEncoder;
         this.dataSource = dataSource;
     }

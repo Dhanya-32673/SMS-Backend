@@ -116,15 +116,14 @@ public class OtpService {
 
         otpRepository.save(verification);
 
-        System.out.println(">>> OTP GENERATED FOR EMAIL: [" + cleanEmail + "] (Code: " + rawOtp + ")");
+        log.info("OTP generated and saved for email: " + cleanEmail);
 
         // Dispatch OTP via Email with error catching
         try {
             emailService.sendOtpEmail(user.getEmail(), rawOtp, purpose.name());
-            log.info("OTP successfully dispatched to " + user.getEmail() + " for purpose " + purpose);
+            log.info("OTP dispatch triggered for " + user.getEmail() + " (Purpose: " + purpose + ")");
         } catch (Exception ex) {
-            log.log(Level.SEVERE, "Failed to send OTP email to " + user.getEmail(), ex);
-            System.err.println(">>> FAILED TO SEND OTP EMAIL TO " + user.getEmail() + ": " + ex.getMessage());
+            log.log(Level.WARNING, "Failed to dispatch OTP email to " + user.getEmail() + ": " + ex.getMessage());
         }
     }
 

