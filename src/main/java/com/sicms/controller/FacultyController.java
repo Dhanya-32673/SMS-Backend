@@ -66,16 +66,17 @@ public class FacultyController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
-    public ResponseEntity<FacultyResponse> getFacultyById(@PathVariable Long id) {
-        FacultyResponse response = facultyService.getFacultyById(id);
+    public ResponseEntity<FacultyResponse> getFacultyById(@PathVariable String id) {
+        FacultyResponse response = facultyService.getFacultyByIdOrCode(id);
         return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<FacultyResponse> updateFaculty(@PathVariable Long id,
+    public ResponseEntity<FacultyResponse> updateFaculty(@PathVariable String id,
             @Valid @RequestBody FacultyUpdateRequest request) {
-        FacultyResponse response = facultyService.updateFaculty(id, request);
+        com.sicms.entity.Faculty faculty = facultyService.findFacultyEntityByIdOrCode(id);
+        FacultyResponse response = facultyService.updateFaculty(faculty.getId(), request);
         return ResponseEntity.ok(response);
     }
 
@@ -85,41 +86,46 @@ public class FacultyController {
     @PostMapping(value = "/{id}/photo", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> uploadFacultyPhoto(
-            @PathVariable Long id,
+            @PathVariable String id,
             @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
-        String publicUrl = photoService.uploadFacultyPhoto(id, file);
-        facultyService.updateFacultyPhoto(id, publicUrl);
+        com.sicms.entity.Faculty faculty = facultyService.findFacultyEntityByIdOrCode(id);
+        String publicUrl = photoService.uploadFacultyPhoto(faculty.getId(), file);
+        facultyService.updateFacultyPhoto(faculty.getId(), publicUrl);
         return ResponseEntity.ok().build();
     }
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, String>> toggleFacultyStatus(@PathVariable Long id,
+    public ResponseEntity<Map<String, String>> toggleFacultyStatus(@PathVariable String id,
             @RequestBody Map<String, String> body) {
+        com.sicms.entity.Faculty faculty = facultyService.findFacultyEntityByIdOrCode(id);
         String status = body.getOrDefault("status", "INACTIVE");
-        facultyService.toggleFacultyStatus(id, status);
+        facultyService.toggleFacultyStatus(faculty.getId(), status);
         return ResponseEntity.ok(Map.of("message", "Faculty status updated to " + status));
     }
 
     @PostMapping("/{id}/assignments")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<FacultyAssignmentResponse> addAssignment(@PathVariable Long id,
+    public ResponseEntity<FacultyAssignmentResponse> addAssignment(@PathVariable String id,
             @Valid @RequestBody FacultyAssignmentRequest request) {
-        FacultyAssignmentResponse response = facultyService.addAssignment(id, request);
+        com.sicms.entity.Faculty faculty = facultyService.findFacultyEntityByIdOrCode(id);
+        FacultyAssignmentResponse response = facultyService.addAssignment(faculty.getId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{id}/assignments")
     @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
-    public ResponseEntity<List<FacultyAssignmentResponse>> getFacultyAssignments(@PathVariable Long id) {
-        List<FacultyAssignmentResponse> list = facultyService.getFacultyAssignments(id);
+    public ResponseEntity<List<FacultyAssignmentResponse>> getFacultyAssignments(@PathVariable String id) {
+        com.sicms.entity.Faculty faculty = facultyService.findFacultyEntityByIdOrCode(id);
+        List<FacultyAssignmentResponse> list = facultyService.getFacultyAssignments(faculty.getId());
         return ResponseEntity.ok(list);
     }
 
     @DeleteMapping("/{id}/assignments/{assignmentId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> removeAssignment(@PathVariable Long id, @PathVariable Long assignmentId) {
-        facultyService.removeAssignment(id, assignmentId);
+    public ResponseEntity<Void> removeAssignment(@PathVariable String id, @PathVariable Long assignmentId) {
+        com.sicms.entity.Faculty faculty = facultyService.findFacultyEntityByIdOrCode(id);
+        facultyService.removeAssignment(faculty.getId(), assignmentId);
         return ResponseEntity.noContent().build();
     }
 
@@ -137,8 +143,9 @@ public class FacultyController {
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> deleteFaculty(@PathVariable Long id) {
-        facultyService.deleteFaculty(id);
+    public ResponseEntity<Void> deleteFaculty(@PathVariable String id) {
+        com.sicms.entity.Faculty faculty = facultyService.findFacultyEntityByIdOrCode(id);
+        facultyService.deleteFaculty(faculty.getId());
         return ResponseEntity.noContent().build();
     }
 }

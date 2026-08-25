@@ -17,6 +17,24 @@ public interface FacultyRepository extends JpaRepository<Faculty, Long> {
         return findFirstByFacultyIdOrderByIdAsc(facultyId);
     }
 
+    Optional<Faculty> findFirstByFacultyIdIgnoreCaseOrderByIdAsc(String facultyId);
+
+    default Optional<Faculty> findByFacultyIdIgnoreCase(String facultyId) {
+        return findFirstByFacultyIdIgnoreCaseOrderByIdAsc(facultyId);
+    }
+
+    Optional<Faculty> findFirstByEmployeeIdOrderByIdAsc(String employeeId);
+
+    default Optional<Faculty> findByEmployeeId(String employeeId) {
+        return findFirstByEmployeeIdOrderByIdAsc(employeeId);
+    }
+
+    Optional<Faculty> findFirstByEmployeeIdIgnoreCaseOrderByIdAsc(String employeeId);
+
+    default Optional<Faculty> findByEmployeeIdIgnoreCase(String employeeId) {
+        return findFirstByEmployeeIdIgnoreCaseOrderByIdAsc(employeeId);
+    }
+
     Optional<Faculty> findFirstByUserIdOrderByIdAsc(Long userId);
 
     default Optional<Faculty> findByUserId(Long userId) {

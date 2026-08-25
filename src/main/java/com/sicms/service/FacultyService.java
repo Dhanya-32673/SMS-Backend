@@ -223,16 +223,67 @@ public class FacultyService {
     }
 
     @Transactional(readOnly = true)
+    public Faculty findFacultyEntityByIdOrCode(String identifier) {
+        if (identifier == null || identifier.isBlank() || "undefined".equalsIgnoreCase(identifier.trim()) || "null".equalsIgnoreCase(identifier.trim())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Faculty identifier is required");
+        }
+        String trimmed = identifier.trim();
+
+        // 1. Try numeric database primary key ID if the identifier is all digits
+        if (trimmed.matches("^\\d+$")) {
+            try {
+                Long numericId = Long.parseLong(trimmed);
+                Optional<Faculty> byId = facultyRepository.findById(numericId);
+                if (byId.isPresent()) {
+                    return byId.get();
+                }
+            } catch (NumberFormatException ignored) {}
+        }
+
+        // 2. Try by exact facultyId (e.g. "FAC-1001" or "FAC-2026-001")
+        Optional<Faculty> byFacultyId = facultyRepository.findByFacultyId(trimmed);
+        if (byFacultyId.isPresent()) {
+            return byFacultyId.get();
+        }
+
+        // 3. Try by case-insensitive facultyId
+        Optional<Faculty> byFacultyIdIgnoreCase = facultyRepository.findByFacultyIdIgnoreCase(trimmed);
+        if (byFacultyIdIgnoreCase.isPresent()) {
+            return byFacultyIdIgnoreCase.get();
+        }
+
+        // 4. Try by employeeId (e.g. "EMP001")
+        Optional<Faculty> byEmployeeId = facultyRepository.findByEmployeeId(trimmed);
+        if (byEmployeeId.isPresent()) {
+            return byEmployeeId.get();
+        }
+
+        // 5. Try by case-insensitive employeeId
+        Optional<Faculty> byEmployeeIdIgnoreCase = facultyRepository.findByEmployeeIdIgnoreCase(trimmed);
+        if (byEmployeeIdIgnoreCase.isPresent()) {
+            return byEmployeeIdIgnoreCase.get();
+        }
+
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Faculty record not found with identifier: " + trimmed);
+    }
+
+    @Transactional(readOnly = true)
+    public FacultyResponse getFacultyByIdOrCode(String identifier) {
+        Faculty faculty = findFacultyEntityByIdOrCode(identifier);
+        return mapToResponse(faculty);
+    }
+
+    @Transactional(readOnly = true)
     public FacultyResponse getFacultyById(Long id) {
         Faculty faculty = facultyRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Faculty not found with ID: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Faculty not found with ID: " + id));
         return mapToResponse(faculty);
     }
 
     @Transactional(readOnly = true)
     public FacultyResponse getFacultyByUserId(Long userId) {
         Faculty faculty = facultyRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Faculty record not found for User ID: " + userId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Faculty record not found for User ID: " + userId));
         return mapToResponse(faculty);
     }
 
