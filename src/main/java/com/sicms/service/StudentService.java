@@ -364,13 +364,21 @@ public class StudentService {
         return results.stream().map(StudentSearchResponse::new).toList();
     }
 
+    @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
     @Transactional
     public void updatePhotoUrl(String studentId, String photoUrl, String currentUserEmail, boolean facultyScoped) {
         Student student = loadStudentForCurrentUser(studentId, currentUserEmail, facultyScoped)
                 .orElseThrow(() -> new StudentNotFoundException("Student with ID '" + studentId + "' not found."));
 
+        String oldPhoto = student.getProfilePhotoUrl();
         student.setProfilePhotoUrl(photoUrl);
         studentRepository.save(student);
+
+        if (oldPhoto != null && !oldPhoto.isBlank() && !oldPhoto.equals(photoUrl)) {
+            try {
+                photoService.deletePhotoFile(oldPhoto);
+            } catch (Exception ignored) {}
+        }
     }
 
     @Transactional(readOnly = true)

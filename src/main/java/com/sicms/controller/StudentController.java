@@ -132,17 +132,39 @@ public class StudentController {
     }
 
     /**
-     * ADMIN ONLY: Upload or change student profile photo
+     * ADMIN & FACULTY: Upload or change student profile photo
      */
     @PostMapping(value = "/{studentId}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
-    public ResponseEntity<Void> uploadStudentPhoto(
+    public ResponseEntity<java.util.Map<String, String>> uploadStudentPhoto(
             @PathVariable String studentId,
             @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal UserDetails userDetails) {
         String publicUrl = studentPhotoService.uploadStudentPhoto(studentId, file);
         studentService.updatePhotoUrl(studentId, publicUrl, userDetails != null ? userDetails.getUsername() : null, isFaculty(userDetails));
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(java.util.Map.of("photoUrl", publicUrl, "studentId", studentId, "message", "Student photo updated successfully"));
+    }
+
+    /**
+     * Get student photo bytes directly with fallback & caching
+     */
+    @GetMapping("/{studentId}/photo")
+    public ResponseEntity<byte[]> getStudentPhoto(
+            @PathVariable String studentId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        StudentResponse student = studentService.getStudentByPublicId(studentId, userDetails != null ? userDetails.getUsername() : null, isFaculty(userDetails));
+        if (student == null || student.getProfilePhotoUrl() == null) {
+            return ResponseEntity.notFound().build();
+        }
+        byte[] bytes = studentPhotoService.getPhotoBytes(student.getProfilePhotoUrl());
+        if (bytes == null || bytes.length == 0) {
+            return ResponseEntity.notFound().build();
+        }
+        String contentType = studentPhotoService.getPhotoContentType(student.getProfilePhotoUrl());
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, "public, max-age=3600")
+                .contentType(MediaType.parseMediaType(contentType))
+                .body(bytes);
     }
 
     /**

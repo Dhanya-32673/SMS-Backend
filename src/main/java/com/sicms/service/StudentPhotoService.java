@@ -5,6 +5,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,9 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -24,6 +28,7 @@ public class StudentPhotoService {
 
     private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList("image/jpeg", "image/png", "image/jpg");
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+    private static final String UPLOAD_ROOT = "uploads/student-photos";
 
     @Value("${SUPABASE_URL:${supabase.url:https://ookzjdmkoaunbrufvmvq.supabase.co}}")
     private String supabaseUrl;
@@ -81,7 +86,17 @@ public class StudentPhotoService {
 
         try {
             byte[] fileBytes = file.getBytes();
+            // 1. Upload to Supabase Storage
             uploadToSupabase(generatedPath, fileBytes, file.getContentType());
+
+            // 2. Save local disk backup
+            try {
+                Path targetFile = Paths.get(UPLOAD_ROOT, generatedPath);
+                Files.createDirectories(targetFile.getParent());
+                Files.write(targetFile, fileBytes);
+            } catch (IOException e) {
+                System.err.println("Warning: Local student photo backup copy failed: " + e.getMessage());
+            }
         } catch (IOException e) {
             System.err.println("Failed to read photo file bytes: " + e.getMessage());
         }
@@ -98,6 +113,14 @@ public class StudentPhotoService {
         try {
             byte[] fileBytes = file.getBytes();
             uploadToSupabase(generatedPath, fileBytes, file.getContentType());
+
+            try {
+                Path targetFile = Paths.get(UPLOAD_ROOT, generatedPath);
+                Files.createDirectories(targetFile.getParent());
+                Files.write(targetFile, fileBytes);
+            } catch (IOException e) {
+                System.err.println("Warning: Local faculty photo backup copy failed: " + e.getMessage());
+            }
         } catch (IOException e) {
             System.err.println("Failed to read faculty photo file bytes: " + e.getMessage());
         }
@@ -129,6 +152,56 @@ public class StudentPhotoService {
             return photoPath;
         }
         return String.format("%s/storage/v1/object/public/%s/%s", supabaseUrl, storageBucket, photoPath);
+    }
+
+    public byte[] getPhotoBytes(String urlOrPath) {
+        if (urlOrPath == null || urlOrPath.isBlank()) return null;
+
+        String cleanPath = extractStoragePathFromUrl(urlOrPath);
+
+        // 1. Try reading from Supabase authenticated or public
+        if (supabaseUrl != null && !supabaseUrl.isBlank()) {
+            String authKey = (secretKey != null && !secretKey.isBlank()) ? secretKey : publishableKey;
+            try {
+                String downloadEndpoint = supabaseUrl + "/storage/v1/object/authenticated/" + storageBucket + "/" + cleanPath;
+                HttpHeaders headers = new HttpHeaders();
+                if (authKey != null && !authKey.isBlank()) {
+                    headers.set("Authorization", "Bearer " + authKey);
+                    headers.set("apikey", authKey);
+                }
+                HttpEntity<Void> entity = new HttpEntity<>(headers);
+                ResponseEntity<byte[]> response = restTemplate.exchange(downloadEndpoint, HttpMethod.GET, entity, byte[].class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    return response.getBody();
+                }
+            } catch (Exception ignored) {
+                try {
+                    String publicEndpoint = supabaseUrl + "/storage/v1/object/public/" + storageBucket + "/" + cleanPath;
+                    ResponseEntity<byte[]> response = restTemplate.getForEntity(publicEndpoint, byte[].class);
+                    if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                        return response.getBody();
+                    }
+                } catch (Exception ignored2) {}
+            }
+        }
+
+        // 2. Fallback to local disk
+        try {
+            Path targetFile = Paths.get(UPLOAD_ROOT, cleanPath);
+            if (Files.exists(targetFile) && Files.isRegularFile(targetFile)) {
+                return Files.readAllBytes(targetFile);
+            }
+        } catch (IOException ignored) {}
+
+        return null;
+    }
+
+    public String getPhotoContentType(String urlOrPath) {
+        if (urlOrPath == null) return "image/jpeg";
+        String lower = urlOrPath.toLowerCase();
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        return "image/jpeg";
     }
 
     private boolean uploadToSupabase(String storagePath, byte[] fileBytes, String contentType) {
@@ -164,7 +237,7 @@ public class StudentPhotoService {
         }
     }
 
-    private String extractStoragePathFromUrl(String url) {
+    public String extractStoragePathFromUrl(String url) {
         if (url == null || url.isBlank()) return url;
         String publicMarker = "/object/public/" + storageBucket + "/";
         if (url.contains(publicMarker)) {
@@ -186,28 +259,36 @@ public class StudentPhotoService {
 
     public boolean deletePhotoFile(String urlOrPath) {
         if (urlOrPath == null || urlOrPath.isBlank()) return false;
-        if (supabaseUrl == null || supabaseUrl.isBlank()) return false;
-
-        String authKey = (secretKey != null && !secretKey.isBlank()) ? secretKey : publishableKey;
-        if (authKey == null || authKey.isBlank()) return false;
 
         String cleanPath = extractStoragePathFromUrl(urlOrPath);
 
-        try {
-            String deleteEndpoint = supabaseUrl + "/storage/v1/object/" + storageBucket + "/" + cleanPath;
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", "Bearer " + authKey);
-            headers.set("apikey", authKey);
-            HttpEntity<Void> entity = new HttpEntity<>(headers);
-            restTemplate.exchange(deleteEndpoint, org.springframework.http.HttpMethod.DELETE, entity, String.class);
-            System.out.println(">>> SUPABASE PHOTO DELETE SUCCESS: " + cleanPath);
-            return true;
-        } catch (org.springframework.web.client.HttpClientErrorException.NotFound e) {
-            System.out.println(">>> SUPABASE PHOTO DELETE: file not found (already deleted): " + cleanPath);
-            return true;
-        } catch (Exception e) {
-            System.err.println(">>> SUPABASE PHOTO DELETE NOTICE (" + cleanPath + "): " + e.getMessage());
-            return false;
+        // 1. Delete from Supabase Storage
+        if (supabaseUrl != null && !supabaseUrl.isBlank()) {
+            String authKey = (secretKey != null && !secretKey.isBlank()) ? secretKey : publishableKey;
+            if (authKey != null && !authKey.isBlank()) {
+                try {
+                    String deleteEndpoint = supabaseUrl + "/storage/v1/object/" + storageBucket + "/" + cleanPath;
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.set("Authorization", "Bearer " + authKey);
+                    headers.set("apikey", authKey);
+                    HttpEntity<Void> entity = new HttpEntity<>(headers);
+                    restTemplate.exchange(deleteEndpoint, org.springframework.http.HttpMethod.DELETE, entity, String.class);
+                    System.out.println(">>> SUPABASE PHOTO DELETE SUCCESS: " + cleanPath);
+                } catch (org.springframework.web.client.HttpClientErrorException.NotFound e) {
+                    System.out.println(">>> SUPABASE PHOTO DELETE: file not found (already deleted): " + cleanPath);
+                } catch (Exception e) {
+                    System.err.println(">>> SUPABASE PHOTO DELETE NOTICE (" + cleanPath + "): " + e.getMessage());
+                }
+            }
         }
+
+        // 2. Delete local disk file
+        try {
+            Path targetFile = Paths.get(UPLOAD_ROOT, cleanPath);
+            Files.deleteIfExists(targetFile);
+        } catch (IOException ignored) {}
+
+        return true;
     }
 }
+

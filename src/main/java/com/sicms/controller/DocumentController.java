@@ -253,6 +253,26 @@ public class DocumentController {
     }
 
     /**
+     * Get complete missing certificates audit calculation with metrics and filtering (ADMIN & FACULTY)
+     */
+    @GetMapping("/missing-audit")
+    @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
+    public ResponseEntity<com.sicms.dto.MissingCertificatesAuditResponse> getMissingCertificatesAudit(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String group,
+            @RequestParam(required = false) String year,
+            @RequestParam(required = false) String section,
+            @RequestParam(required = false) String academicYear) {
+        com.sicms.dto.MissingCertificatesAuditResponse response = documentService.getMissingCertificatesAudit(
+                search, group, year, section, academicYear,
+                userDetails != null ? userDetails.getUsername() : null,
+                isFaculty(userDetails)
+        );
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Serve document file bytes for preview and download.
      * GET /api/documents/{id}/file?download=true (optional param for attachment)
      */

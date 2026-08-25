@@ -27,9 +27,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.sicms.dto.DocumentResponse;
 import com.sicms.dto.DocumentSummaryResponse;
+import com.sicms.dto.MissingCertificatesAuditResponse;
 import com.sicms.dto.MissingDocumentResponse;
 import com.sicms.dto.PaginatedStudentResponse;
 import com.sicms.dto.StudentCertificateSummaryResponse;
+import com.sicms.dto.StudentMissingCertificateDto;
 import com.sicms.entity.DocumentCategory;
 import com.sicms.entity.DocumentStatus;
 import com.sicms.entity.DocumentType;
@@ -133,24 +135,31 @@ public class DocumentService {
 
         String storagePath = storageService.saveFile(studentId, file);
 
-        StudentDocument doc = new StudentDocument();
-        doc.setStudent(student);
-        doc.setDocumentType(documentType);
-        doc.setDocumentNumber(documentNumber);
-        doc.setStoragePath(storagePath);
-        doc.setOriginalFileName(file.getOriginalFilename() != null ? file.getOriginalFilename() : "document");
-        doc.setStoredFileName(UUID.randomUUID().toString());
-        doc.setMimeType(file.getContentType());
-        doc.setFileSize(file.getSize());
-        doc.setStatus(DocumentStatus.UPLOADED);
-        doc.setIssueDate(issueDate);
-        doc.setExpiryDate(expiryDate);
-        doc.setIssuedBy(issuedBy);
-        doc.setNotes(notes);
-        doc.setUploadedBy(uploadedBy);
+        try {
+            StudentDocument doc = new StudentDocument();
+            doc.setStudent(student);
+            doc.setDocumentType(documentType);
+            doc.setDocumentNumber(documentNumber);
+            doc.setStoragePath(storagePath);
+            doc.setOriginalFileName(file.getOriginalFilename() != null ? file.getOriginalFilename() : "document");
+            doc.setStoredFileName(UUID.randomUUID().toString());
+            doc.setMimeType(file.getContentType());
+            doc.setFileSize(file.getSize());
+            doc.setStatus(DocumentStatus.UPLOADED);
+            doc.setIssueDate(issueDate);
+            doc.setExpiryDate(expiryDate);
+            doc.setIssuedBy(issuedBy);
+            doc.setNotes(notes);
+            doc.setUploadedBy(uploadedBy);
 
-        StudentDocument saved = documentRepository.save(doc);
-        return mapToResponse(saved);
+            StudentDocument saved = documentRepository.save(doc);
+            return mapToResponse(saved);
+        } catch (Exception ex) {
+            try {
+                storageService.deleteFile(storagePath);
+            } catch (Exception ignored) {}
+            throw ex;
+        }
     }
 
     @Transactional
@@ -382,6 +391,203 @@ public class DocumentService {
         }
 
         return missingList;
+    }
+
+    @Transactional(readOnly = true)
+    public MissingCertificatesAuditResponse getMissingCertificatesAudit(
+            String search,
+            String group,
+            String year,
+            String section,
+            String academicYear,
+            String currentUserEmail,
+            boolean facultyScoped) {
+
+        // 1. Mandatory document types
+        List<DocumentType> requiredTypes = documentTypeRepository.findByActiveTrue()
+                .stream().filter(DocumentType::isRequiredByDefault).collect(Collectors.toList());
+
+        List<StudentMissingCertificateDto.DocumentTypeItem> mandatoryTypeItems = requiredTypes.stream()
+                .map(dt -> new StudentMissingCertificateDto.DocumentTypeItem(
+                        dt.getId(),
+                        dt.getCode(),
+                        dt.getName(),
+                        dt.getCategory() != null ? dt.getCategory().name() : "GENERAL",
+                        "MANDATORY"
+                )).collect(Collectors.toList());
+
+        // 2. Fetch scoped active students
+        List<Student> activeStudents;
+        if (facultyScoped) {
+            Faculty faculty = facultyService.getFacultyByUserEmail(currentUserEmail);
+            activeStudents = studentRepository.findAccessibleStudentsByFaculty(faculty.getId())
+                    .stream().filter(s -> s.getStatus() == StudentStatus.ACTIVE).collect(Collectors.toList());
+        } else {
+            activeStudents = studentRepository.findAll()
+                    .stream().filter(s -> s.getStatus() == StudentStatus.ACTIVE).collect(Collectors.toList());
+        }
+
+        // 3. Batch load all valid non-archived non-rejected student documents
+        List<StudentDocument> allDocs = documentRepository.findByStatusIn(
+                List.of(DocumentStatus.UPLOADED, DocumentStatus.PENDING, DocumentStatus.VERIFIED)
+        );
+
+        Map<Long, List<StudentDocument>> studentDocsMap = allDocs.stream()
+                .filter(d -> d.getStudent() != null && d.getStudent().getId() != null
+                        && d.getStatus() != DocumentStatus.REJECTED && d.getStatus() != DocumentStatus.ARCHIVED
+                        && d.getDocumentType() != null)
+                .collect(Collectors.groupingBy(d -> d.getStudent().getId()));
+
+        int totalActiveStudents = activeStudents.size();
+        int compliantStudentsCount = 0;
+        int missingStudentsCount = 0;
+
+        List<StudentMissingCertificateDto> studentsWithMissing = new ArrayList<>();
+
+        for (Student st : activeStudents) {
+            List<StudentDocument> uploadedDocs = studentDocsMap.getOrDefault(st.getId(), Collections.emptyList());
+            Map<Long, StudentDocument> uploadedTypesMap = uploadedDocs.stream()
+                    .filter(d -> d.getDocumentType() != null)
+                    .collect(Collectors.toMap(
+                            d -> d.getDocumentType().getId(),
+                            d -> d,
+                            (d1, d2) -> d1
+                    ));
+
+            List<StudentMissingCertificateDto.DocumentTypeItem> missingCerts = new ArrayList<>();
+            List<StudentMissingCertificateDto.DocumentTypeItem> uploadedCerts = new ArrayList<>();
+
+            for (DocumentType reqType : requiredTypes) {
+                if (uploadedTypesMap.containsKey(reqType.getId())) {
+                    StudentDocument doc = uploadedTypesMap.get(reqType.getId());
+                    uploadedCerts.add(new StudentMissingCertificateDto.DocumentTypeItem(
+                            reqType.getId(),
+                            reqType.getCode(),
+                            reqType.getName(),
+                            reqType.getCategory() != null ? reqType.getCategory().name() : "GENERAL",
+                            doc.getStatus() != null ? doc.getStatus().name() : "UPLOADED"
+                    ));
+                } else {
+                    missingCerts.add(new StudentMissingCertificateDto.DocumentTypeItem(
+                            reqType.getId(),
+                            reqType.getCode(),
+                            reqType.getName(),
+                            reqType.getCategory() != null ? reqType.getCategory().name() : "GENERAL",
+                            "MISSING"
+                    ));
+                }
+            }
+
+            // Also add any other uploaded non-mandatory documents
+            for (StudentDocument doc : uploadedDocs) {
+                if (doc.getDocumentType() != null && requiredTypes.stream().noneMatch(rt -> rt.getId().equals(doc.getDocumentType().getId()))) {
+                    uploadedCerts.add(new StudentMissingCertificateDto.DocumentTypeItem(
+                            doc.getDocumentType().getId(),
+                            doc.getDocumentType().getCode(),
+                            doc.getDocumentType().getName(),
+                            doc.getDocumentType().getCategory() != null ? doc.getDocumentType().getCategory().name() : "GENERAL",
+                            doc.getStatus() != null ? doc.getStatus().name() : "UPLOADED"
+                    ));
+                }
+            }
+
+            int totalReq = requiredTypes.size();
+            int uploadedCount = totalReq - missingCerts.size();
+            int missingCount = missingCerts.size();
+            double completion = totalReq > 0 ? ((double) uploadedCount / totalReq) * 100.0 : 100.0;
+            completion = Math.round(completion * 10.0) / 10.0;
+
+            boolean isCompliant = missingCount == 0;
+            if (isCompliant) {
+                compliantStudentsCount++;
+            } else {
+                missingStudentsCount++;
+            }
+
+            // Apply search & filtering criteria to missing students list
+            if (!isCompliant) {
+                boolean matches = true;
+
+                if (search != null && !search.isBlank()) {
+                    String q = search.trim().toLowerCase();
+                    boolean matchName = st.getFullName() != null && st.getFullName().toLowerCase().contains(q);
+                    boolean matchId = st.getStudentId() != null && st.getStudentId().toLowerCase().contains(q);
+                    boolean matchRoll = st.getRollNumber() != null && st.getRollNumber().toLowerCase().contains(q);
+                    if (!matchName && !matchId && !matchRoll) {
+                        matches = false;
+                    }
+                }
+
+                if (matches && group != null && !group.isBlank()) {
+                    String stGroup = st.getAcademicDetail() != null ? st.getAcademicDetail().getBranchGroup() : null;
+                    if (stGroup == null || !stGroup.equalsIgnoreCase(group.trim())) {
+                        matches = false;
+                    }
+                }
+
+                if (matches && year != null && !year.isBlank()) {
+                    String stYear = st.getAcademicDetail() != null ? st.getAcademicDetail().getIntermediateYear() : null;
+                    if (stYear == null || !stYear.equalsIgnoreCase(year.trim())) {
+                        matches = false;
+                    }
+                }
+
+                if (matches && section != null && !section.isBlank()) {
+                    String stSection = st.getAcademicDetail() != null ? st.getAcademicDetail().getSection() : null;
+                    if (stSection == null || !stSection.equalsIgnoreCase(section.trim())) {
+                        matches = false;
+                    }
+                }
+
+                if (matches && academicYear != null && !academicYear.isBlank()) {
+                    String stAcadYear = st.getAcademicDetail() != null ? st.getAcademicDetail().getAcademicYear() : null;
+                    if (stAcadYear == null || !stAcadYear.equalsIgnoreCase(academicYear.trim())) {
+                        matches = false;
+                    }
+                }
+
+                if (matches) {
+                    StudentMissingCertificateDto dto = new StudentMissingCertificateDto();
+                    dto.setId(st.getId());
+                    dto.setStudentId(st.getStudentId());
+                    dto.setFullName(st.getFullName());
+                    dto.setRollNumber(st.getRollNumber());
+                    dto.setAdmissionNumber(st.getAdmissionNumber());
+                    dto.setProfilePhotoUrl(st.getProfilePhotoUrl());
+                    dto.setStatus(st.getStatus() != null ? st.getStatus().name() : "ACTIVE");
+
+                    if (st.getAcademicDetail() != null) {
+                        dto.setBranchGroup(st.getAcademicDetail().getBranchGroup());
+                        dto.setIntermediateYear(st.getAcademicDetail().getIntermediateYear());
+                        dto.setAcademicYear(st.getAcademicDetail().getAcademicYear());
+                        dto.setSection(st.getAcademicDetail().getSection());
+                    }
+
+                    dto.setTotalRequiredCount(totalReq);
+                    dto.setUploadedCount(uploadedCount);
+                    dto.setMissingCount(missingCount);
+                    dto.setCompletionPercentage(completion);
+                    dto.setMissingCertificates(missingCerts);
+                    dto.setUploadedCertificates(uploadedCerts);
+
+                    studentsWithMissing.add(dto);
+                }
+            }
+        }
+
+        double compliancePercentage = totalActiveStudents > 0
+                ? ((double) compliantStudentsCount / totalActiveStudents) * 100.0
+                : 100.0;
+        compliancePercentage = Math.round(compliancePercentage * 10.0) / 10.0;
+
+        return new MissingCertificatesAuditResponse(
+                totalActiveStudents,
+                compliantStudentsCount,
+                missingStudentsCount,
+                compliancePercentage,
+                mandatoryTypeItems,
+                studentsWithMissing
+        );
     }
 
     public long countMissingDocuments(String currentUserEmail, boolean facultyScoped) {
