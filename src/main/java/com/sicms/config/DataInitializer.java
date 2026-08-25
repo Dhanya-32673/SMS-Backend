@@ -119,8 +119,47 @@ public class DataInitializer implements CommandLineRunner {
             System.err.println("Admin user initialization warning: " + e.getMessage());
         }
 
+        // === 6. Supabase Storage Policies ===
+        try {
+            seedStoragePolicies();
+        } catch (Exception e) {
+            System.err.println("Storage policies initialization warning: " + e.getMessage());
+        }
+
         System.out.println("Application startup completed successfully");
         System.out.println("=================================");
+    }
+
+    private void seedStoragePolicies() {
+        try (java.sql.Connection conn = dataSource.getConnection(); java.sql.Statement stmt = conn.createStatement()) {
+            String[] sqls = {
+                "UPDATE storage.buckets SET public = true WHERE id = 'student-profile-photos';",
+                "DROP POLICY IF EXISTS \"Allow public uploads to student-profile-photos\" ON storage.objects;",
+                "CREATE POLICY \"Allow public uploads to student-profile-photos\" ON storage.objects FOR INSERT TO public WITH CHECK (bucket_id = 'student-profile-photos');",
+                "DROP POLICY IF EXISTS \"Allow public update to student-profile-photos\" ON storage.objects;",
+                "CREATE POLICY \"Allow public update to student-profile-photos\" ON storage.objects FOR UPDATE TO public USING (bucket_id = 'student-profile-photos');",
+                "DROP POLICY IF EXISTS \"Allow public select from student-profile-photos\" ON storage.objects;",
+                "CREATE POLICY \"Allow public select from student-profile-photos\" ON storage.objects FOR SELECT TO public USING (bucket_id = 'student-profile-photos');",
+                "DROP POLICY IF EXISTS \"Allow public delete from student-profile-photos\" ON storage.objects;",
+                "CREATE POLICY \"Allow public delete from student-profile-photos\" ON storage.objects FOR DELETE TO public USING (bucket_id = 'student-profile-photos');",
+                "DROP POLICY IF EXISTS \"Allow public uploads to student-documents\" ON storage.objects;",
+                "CREATE POLICY \"Allow public uploads to student-documents\" ON storage.objects FOR INSERT TO public WITH CHECK (bucket_id = 'student-documents');",
+                "DROP POLICY IF EXISTS \"Allow public update to student-documents\" ON storage.objects;",
+                "CREATE POLICY \"Allow public update to student-documents\" ON storage.objects FOR UPDATE TO public USING (bucket_id = 'student-documents');",
+                "DROP POLICY IF EXISTS \"Allow public select from student-documents\" ON storage.objects;",
+                "CREATE POLICY \"Allow public select from student-documents\" ON storage.objects FOR SELECT TO public USING (bucket_id = 'student-documents');",
+                "DROP POLICY IF EXISTS \"Allow public delete from student-documents\" ON storage.objects;",
+                "CREATE POLICY \"Allow public delete from student-documents\" ON storage.objects FOR DELETE TO public USING (bucket_id = 'student-documents');"
+            };
+            for (String sql : sqls) {
+                try {
+                    stmt.execute(sql);
+                } catch (Exception ignored) {}
+            }
+            System.out.println("Supabase Storage policies verified");
+        } catch (Exception e) {
+            System.err.println("Notice: Supabase Storage policy seeding skipped: " + e.getMessage());
+        }
     }
 
     private void seedAdminUser(String email) {

@@ -25,6 +25,8 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
 
     Optional<Student> findByRollNumberIgnoreCase(String rollNumber);
 
+    Optional<Student> findByAdmissionNumberIgnoreCase(String admissionNumber);
+
     boolean existsByStudentId(String studentId);
 
     boolean existsByRollNumberIgnoreCase(String rollNumber);

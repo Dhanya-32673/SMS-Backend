@@ -480,7 +480,23 @@ public class StudentService {
     }
 
     private Optional<Student> loadStudentForCurrentUser(String studentId, String currentUserEmail, boolean facultyScoped) {
-        Student student = studentRepository.findByStudentId(studentId).orElse(null);
+        if (studentId == null || studentId.isBlank()) {
+            return Optional.empty();
+        }
+        String clean = studentId.trim();
+        Student student = studentRepository.findByStudentId(clean).orElse(null);
+        if (student == null) {
+            try {
+                Long idNum = Long.parseLong(clean);
+                student = studentRepository.findById(idNum).orElse(null);
+            } catch (NumberFormatException ignored) {}
+        }
+        if (student == null) {
+            student = studentRepository.findByRollNumberIgnoreCase(clean).orElse(null);
+        }
+        if (student == null) {
+            student = studentRepository.findByAdmissionNumberIgnoreCase(clean).orElse(null);
+        }
         if (student == null) {
             return Optional.empty();
         }
