@@ -288,35 +288,47 @@ public class FacultyService {
     }
 
     @Transactional
+    @CacheEvict(value = {"faculty", "faculties", "adminDashboard", "facultyDashboard"}, allEntries = true)
     public FacultyResponse updateFaculty(Long id, FacultyUpdateRequest request) {
         Faculty faculty = facultyRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Faculty not found with ID: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Faculty not found with ID: " + id));
 
-        faculty.setFirstName(request.getFirstName());
-        faculty.setMiddleName(request.getMiddleName());
-        faculty.setLastName(request.getLastName());
-        faculty.setGender(request.getGender());
-        faculty.setDateOfBirth(request.getDateOfBirth());
+        if (request.getFirstName() != null) faculty.setFirstName(request.getFirstName().trim());
+        if (request.getMiddleName() != null) faculty.setMiddleName(request.getMiddleName().trim());
+        if (request.getLastName() != null) faculty.setLastName(request.getLastName().trim());
+
+        String fn = faculty.getFirstName() != null ? faculty.getFirstName().trim() : "";
+        String mn = faculty.getMiddleName() != null && !faculty.getMiddleName().isBlank() ? faculty.getMiddleName().trim() + " " : "";
+        String ln = faculty.getLastName() != null ? faculty.getLastName().trim() : "";
+        String computedFullName = (fn + " " + mn + ln).trim();
+        faculty.setFullName(computedFullName);
+
+        if (request.getGender() != null) faculty.setGender(request.getGender());
+        if (request.getDateOfBirth() != null) faculty.setDateOfBirth(request.getDateOfBirth());
         if (request.getPhotoUrl() != null) faculty.setPhotoUrl(request.getPhotoUrl());
-        faculty.setMobileNumber(request.getMobileNumber());
-        faculty.setAlternateMobile(request.getAlternateMobile());
-        faculty.setAddress(request.getAddress());
-        faculty.setCity(request.getCity());
-        faculty.setDistrict(request.getDistrict());
-        faculty.setState(request.getState());
-        faculty.setPinCode(request.getPinCode());
-        faculty.setDesignation(request.getDesignation());
-        faculty.setQualification(request.getQualification());
-        faculty.setDepartment(request.getDepartment());
-        faculty.setPrimaryGroup(request.getPrimaryGroup());
-        faculty.setJoiningDate(request.getJoiningDate());
-        faculty.setEmploymentType(request.getEmploymentType());
-        faculty.setExperience(request.getExperience());
-        if (request.getStatus() != null) faculty.setStatus(request.getStatus());
+        if (request.getMobileNumber() != null) faculty.setMobileNumber(request.getMobileNumber().trim());
+        if (request.getAlternateMobile() != null) faculty.setAlternateMobile(request.getAlternateMobile().trim());
+        if (request.getEmail() != null) faculty.setEmail(request.getEmail().trim().toLowerCase());
+        if (request.getAddress() != null) faculty.setAddress(request.getAddress().trim());
+        if (request.getCity() != null) faculty.setCity(request.getCity().trim());
+        if (request.getDistrict() != null) faculty.setDistrict(request.getDistrict().trim());
+        if (request.getState() != null) faculty.setState(request.getState().trim());
+        if (request.getPinCode() != null) faculty.setPinCode(request.getPinCode().trim());
+        if (request.getDesignation() != null) faculty.setDesignation(request.getDesignation().trim());
+        if (request.getQualification() != null) faculty.setQualification(request.getQualification().trim());
+        if (request.getDepartment() != null) faculty.setDepartment(request.getDepartment().trim());
+        if (request.getPrimaryGroup() != null) faculty.setPrimaryGroup(request.getPrimaryGroup().trim());
+        if (request.getJoiningDate() != null) faculty.setJoiningDate(request.getJoiningDate());
+        if (request.getEmploymentType() != null) faculty.setEmploymentType(request.getEmploymentType().trim());
+        if (request.getExperience() != null) faculty.setExperience(request.getExperience().trim());
+        if (request.getStatus() != null) faculty.setStatus(request.getStatus().trim());
 
         User user = faculty.getUser();
         if (user != null) {
-            user.setFullName(faculty.getFullName());
+            user.setFullName(computedFullName);
+            if (request.getEmail() != null && !request.getEmail().isBlank()) {
+                user.setEmail(request.getEmail().trim().toLowerCase());
+            }
             userRepository.save(user);
         }
 
@@ -325,17 +337,19 @@ public class FacultyService {
     }
 
     @Transactional
+    @CacheEvict(value = {"faculty", "faculties", "adminDashboard", "facultyDashboard"}, allEntries = true)
     public void updateFacultyPhoto(Long id, String photoUrl) {
         Faculty faculty = facultyRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Faculty not found with ID: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Faculty not found with ID: " + id));
         faculty.setPhotoUrl(photoUrl);
         facultyRepository.save(faculty);
     }
 
     @Transactional
+    @CacheEvict(value = {"faculty", "faculties", "adminDashboard", "facultyDashboard", "sections"}, allEntries = true)
     public FacultyAssignmentResponse addAssignment(Long facultyId, FacultyAssignmentRequest request) {
         Faculty faculty = facultyRepository.findById(facultyId)
-                .orElseThrow(() -> new RuntimeException("Faculty not found with ID: " + facultyId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Faculty not found with ID: " + facultyId));
 
         // Check if section is already assigned to another faculty member
         List<FacultyAssignment> activeAssignments = assignmentRepository.findActiveAssignments(
@@ -372,10 +386,10 @@ public class FacultyService {
     }
 
     @Transactional
-    @CacheEvict(value = {"faculty", "adminDashboard", "sections"}, allEntries = true)
+    @CacheEvict(value = {"faculty", "faculties", "adminDashboard", "facultyDashboard", "sections"}, allEntries = true)
     public void removeAssignment(Long facultyId, Long assignmentId) {
         FacultyAssignment assignment = assignmentRepository.findById(assignmentId)
-                .orElseThrow(() -> new RuntimeException("Assignment not found with ID: " + assignmentId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found with ID: " + assignmentId));
 
         if (!assignment.getFaculty().getId().equals(facultyId)) {
             throw new IllegalArgumentException("Assignment does not belong to faculty ID: " + facultyId);
@@ -392,9 +406,10 @@ public class FacultyService {
     }
 
     @Transactional
+    @CacheEvict(value = {"faculty", "faculties", "adminDashboard", "facultyDashboard"}, allEntries = true)
     public void toggleFacultyStatus(Long id, String status) {
         Faculty faculty = facultyRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Faculty not found with ID: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Faculty not found with ID: " + id));
         faculty.setStatus(status);
 
         User user = faculty.getUser();

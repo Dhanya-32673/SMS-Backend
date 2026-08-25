@@ -264,7 +264,18 @@ public class StudentService {
         if (request.getFirstName() != null) student.setFirstName(request.getFirstName().trim());
         if (request.getMiddleName() != null) student.setMiddleName(request.getMiddleName().trim());
         if (request.getLastName() != null) student.setLastName(request.getLastName().trim());
-        if (request.getFullName() != null) student.setFullName(request.getFullName().trim());
+
+        String fn = student.getFirstName() != null ? student.getFirstName().trim() : "";
+        String mn = student.getMiddleName() != null && !student.getMiddleName().isBlank() ? student.getMiddleName().trim() + " " : "";
+        String ln = student.getLastName() != null ? student.getLastName().trim() : "";
+        String calculatedFullName = (fn + " " + mn + ln).trim();
+
+        if (request.getFullName() != null && !request.getFullName().isBlank() && !request.getFullName().trim().equalsIgnoreCase(calculatedFullName)) {
+            student.setFullName(request.getFullName().trim());
+        } else {
+            student.setFullName(calculatedFullName);
+        }
+
         if (request.getGender() != null) student.setGender(request.getGender());
         if (request.getDateOfBirth() != null) student.setDateOfBirth(request.getDateOfBirth());
         if (request.getBloodGroup() != null) student.setBloodGroup(request.getBloodGroup());
@@ -320,7 +331,13 @@ public class StudentService {
         if (request.getBranchGroup() != null) academic.setBranchGroup(request.getBranchGroup());
         if (request.getIntermediateYear() != null) academic.setIntermediateYear(request.getIntermediateYear());
         if (request.getSemester() != null) academic.setSemester(request.getSemester());
-        if (request.getSection() != null) academic.setSection(request.getSection());
+        if (request.getSection() != null) {
+            String cleanSec = request.getSection().trim();
+            if (cleanSec.toLowerCase().startsWith("section ")) {
+                cleanSec = cleanSec.substring(8).trim();
+            }
+            academic.setSection(cleanSec);
+        }
         if (request.getBatch() != null) academic.setBatch(request.getBatch());
         if (request.getAcademicYear() != null) academic.setAcademicYear(request.getAcademicYear());
         if (request.getAdmissionDate() != null) academic.setAdmissionDate(request.getAdmissionDate());
