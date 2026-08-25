@@ -2,6 +2,7 @@ package com.sicms.util;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,7 +23,6 @@ import com.sicms.entity.Student;
 import com.sicms.entity.StudentAcademicDetail;
 import com.sicms.entity.StudentContactDetail;
 import com.sicms.entity.StudentDocument;
-import com.sicms.entity.StudentGuardian;
 import com.sicms.entity.StudentParentDetail;
 import com.sicms.entity.StudentStatus;
 import com.sicms.entity.User;
@@ -44,11 +44,12 @@ public class StudentExcelExporterTest {
         student.setGender("MALE");
         student.setDateOfBirth(LocalDate.of(2008, 5, 15));
         student.setBloodGroup("O+");
-        student.setAadhaarNumber("123456789012");
         student.setNationality("Indian");
-        student.setCasteCategory("General");
         student.setReligion("Hindu");
-        student.setProfilePhotoUrl("https://example.com/photo.jpg");
+        student.setCasteCategory("General");
+        student.setAadhaarNumber("123456789012");
+        student.setPanNumber("ABCDE1234F");
+        student.setIdentificationMarks("Mole on neck");
         student.setStatus(StudentStatus.ACTIVE);
         student.setCreatedAt(LocalDateTime.of(2026, 1, 10, 10, 30));
         student.setUpdatedAt(LocalDateTime.of(2026, 2, 1, 14, 0));
@@ -83,37 +84,21 @@ public class StudentExcelExporterTest {
         academic.setAdmissionType("REGULAR");
         academic.setRegulation("State Board");
         academic.setHostelDayScholar("DAY_SCHOLAR");
+        academic.setMedium("English");
         student.setAcademicDetail(academic);
 
         StudentParentDetail parent = new StudentParentDetail();
         parent.setFatherName("Suresh Sharma");
-        parent.setParentMobile("9876543210");
-        parent.setOccupation("Software Engineer");
         parent.setMotherName("Sunita Sharma");
+        parent.setParentMobile("9876543210");
+        parent.setParentEmail("parent@example.com");
+        parent.setOccupation("Software Engineer");
+        parent.setAnnualIncome(new BigDecimal("600000.00"));
         student.setParentDetail(parent);
 
-        StudentGuardian guardian = new StudentGuardian();
-        guardian.setGuardianName("Ramesh Sharma");
-        guardian.setRelationship("Uncle");
-        guardian.setGuardianMobile("9876543212");
-        student.setGuardianDetail(guardian);
-
-        DocumentType docTypeSsc = new DocumentType();
-        docTypeSsc.setId(1L);
-        docTypeSsc.setCode("SSC_MEMO");
-        docTypeSsc.setName("SSC Marks Memo");
-        docTypeSsc.setCategory(DocumentCategory.ACADEMIC);
-        docTypeSsc.setRequiredByDefault(true);
-
-        StudentDocument doc1 = new StudentDocument();
-        doc1.setId(101L);
-        doc1.setStudent(student);
-        doc1.setDocumentType(docTypeSsc);
-        doc1.setStatus(DocumentStatus.VERIFIED);
-
         List<Student> students = List.of(student);
-        Map<String, List<StudentDocument>> docsMap = Map.of("STU2026001", List.of(doc1));
-        List<DocumentType> requiredTypes = List.of(docTypeSsc);
+        Map<String, List<StudentDocument>> docsMap = Map.of();
+        List<DocumentType> requiredTypes = List.of();
 
         // 2. Act - Export to byte stream
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -136,12 +121,13 @@ public class StudentExcelExporterTest {
             // Check Row 1: Header Row
             Row headerRow = sheet.getRow(1);
             Assertions.assertNotNull(headerRow);
-            Assertions.assertEquals(70, headerRow.getLastCellNum(), "Total columns must be 70");
+            Assertions.assertEquals(45, headerRow.getLastCellNum(), "Total columns must be 45");
             Assertions.assertEquals("Student ID", headerRow.getCell(0).getStringCellValue());
-            Assertions.assertEquals("Full Name", headerRow.getCell(7).getStringCellValue());
-            Assertions.assertEquals("Academic Year", headerRow.getCell(26).getStringCellValue());
-            Assertions.assertEquals("Father Name", headerRow.getCell(40).getStringCellValue());
-            Assertions.assertEquals("Last Updated Date", headerRow.getCell(69).getStringCellValue());
+            Assertions.assertEquals("Full Name", headerRow.getCell(6).getStringCellValue());
+            Assertions.assertEquals("Mobile Number", headerRow.getCell(17).getStringCellValue());
+            Assertions.assertEquals("Father Name", headerRow.getCell(26).getStringCellValue());
+            Assertions.assertEquals("Academic Year", headerRow.getCell(32).getStringCellValue());
+            Assertions.assertEquals("University / Board ID", headerRow.getCell(44).getStringCellValue());
 
             // Check Row 2: Data Row
             Row dataRow = sheet.getRow(2);
@@ -149,14 +135,14 @@ public class StudentExcelExporterTest {
             Assertions.assertEquals("STU2026001", dataRow.getCell(0).getStringCellValue());
             Assertions.assertEquals("ADM2026001", dataRow.getCell(1).getStringCellValue());
             Assertions.assertEquals("26MPC001", dataRow.getCell(2).getStringCellValue());
-            Assertions.assertEquals("Rahul Kumar Sharma", dataRow.getCell(7).getStringCellValue());
-            Assertions.assertEquals("15-05-2008", dataRow.getCell(9).getStringCellValue());
-            Assertions.assertEquals("MPC", dataRow.getCell(30).getStringCellValue());
-            Assertions.assertEquals("ACTIVE", dataRow.getCell(38).getStringCellValue());
-            Assertions.assertEquals("Active", dataRow.getCell(39).getStringCellValue());
-            Assertions.assertEquals("Suresh Sharma", dataRow.getCell(40).getStringCellValue());
-            Assertions.assertEquals("Yes", dataRow.getCell(55).getStringCellValue()); // SSC Certificate Uploaded
-            Assertions.assertEquals("Principal Admin", dataRow.getCell(66).getStringCellValue());
+            Assertions.assertEquals("Rahul Kumar Sharma", dataRow.getCell(6).getStringCellValue());
+            Assertions.assertEquals("15-05-2008", dataRow.getCell(8).getStringCellValue());
+            Assertions.assertEquals("ACTIVE", dataRow.getCell(16).getStringCellValue());
+            Assertions.assertEquals("9876543210", dataRow.getCell(17).getStringCellValue());
+            Assertions.assertEquals("Suresh Sharma", dataRow.getCell(26).getStringCellValue());
+            Assertions.assertEquals("2026-2027", dataRow.getCell(32).getStringCellValue());
+            Assertions.assertEquals("MPC", dataRow.getCell(34).getStringCellValue());
+            Assertions.assertEquals("BIE202699", dataRow.getCell(44).getStringCellValue());
         }
     }
 }
