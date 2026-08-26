@@ -27,7 +27,9 @@ import com.sicms.dto.StudentIdCardResponse;
 import com.sicms.dto.StudentResponse;
 import com.sicms.dto.StudentSearchResponse;
 import com.sicms.dto.UpdateStudentRequest;
+import com.sicms.entity.Student;
 import com.sicms.entity.StudentStatus;
+import com.sicms.exception.StudentNotFoundException;
 import com.sicms.service.StudentPhotoService;
 import com.sicms.service.StudentService;
 
@@ -140,9 +142,21 @@ public class StudentController {
             @PathVariable String studentId,
             @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal UserDetails userDetails) {
-        String publicUrl = studentPhotoService.uploadStudentPhoto(studentId, file);
-        studentService.updatePhotoUrl(studentId, publicUrl, userDetails != null ? userDetails.getUsername() : null, isFaculty(userDetails));
-        return ResponseEntity.ok(java.util.Map.of("photoUrl", publicUrl, "studentId", studentId, "message", "Student photo updated successfully"));
+        String userEmail = userDetails != null ? userDetails.getUsername() : null;
+        boolean facultyScoped = isFaculty(userDetails);
+
+        Student student = studentService.loadStudentForCurrentUser(studentId, userEmail, facultyScoped)
+                .orElseThrow(() -> new StudentNotFoundException("Student with ID '" + studentId + "' not found."));
+
+        String canonicalId = student.getStudentId();
+        String publicUrl = studentPhotoService.uploadStudentPhoto(canonicalId, file);
+        studentService.updatePhotoUrl(canonicalId, publicUrl, userEmail, facultyScoped);
+
+        return ResponseEntity.ok(java.util.Map.of(
+                "photoUrl", publicUrl,
+                "studentId", canonicalId,
+                "message", "Student photo updated successfully"
+        ));
     }
 
     /**
@@ -162,7 +176,7 @@ public class StudentController {
         }
         String contentType = studentPhotoService.getPhotoContentType(student.getProfilePhotoUrl());
         return ResponseEntity.ok()
-                .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, "public, max-age=3600")
+                .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, "no-cache, must-revalidate")
                 .contentType(MediaType.parseMediaType(contentType))
                 .body(bytes);
     }

@@ -285,7 +285,25 @@ public class StudentService {
         if (request.getAadhaarNumber() != null) student.setAadhaarNumber(request.getAadhaarNumber());
         if (request.getPanNumber() != null) student.setPanNumber(request.getPanNumber());
         if (request.getIdentificationMarks() != null) student.setIdentificationMarks(request.getIdentificationMarks());
-        if (request.getProfilePhotoUrl() != null) student.setProfilePhotoUrl(request.getProfilePhotoUrl());
+        if (request.getProfilePhotoUrl() != null) {
+            String newPhoto = request.getProfilePhotoUrl().trim();
+            String oldPhoto = student.getProfilePhotoUrl();
+            if (newPhoto.isBlank() || "null".equalsIgnoreCase(newPhoto)) {
+                student.setProfilePhotoUrl(null);
+                if (oldPhoto != null && !oldPhoto.isBlank()) {
+                    try {
+                        photoService.deletePhotoFile(oldPhoto);
+                    } catch (Exception ignored) {}
+                }
+            } else {
+                student.setProfilePhotoUrl(newPhoto);
+                if (oldPhoto != null && !oldPhoto.isBlank() && !oldPhoto.equals(newPhoto)) {
+                    try {
+                        photoService.deletePhotoFile(oldPhoto);
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
         if (request.getStatus() != null) student.setStatus(request.getStatus());
 
         // Contact Detail
@@ -479,7 +497,7 @@ public class StudentService {
         System.out.println(">>> STUDENT PURGED SUCCESSFULLY: " + actualStudentId + " (id=" + student.getId() + ")");
     }
 
-    private Optional<Student> loadStudentForCurrentUser(String studentId, String currentUserEmail, boolean facultyScoped) {
+    public Optional<Student> loadStudentForCurrentUser(String studentId, String currentUserEmail, boolean facultyScoped) {
         if (studentId == null || studentId.isBlank()) {
             return Optional.empty();
         }
