@@ -10,8 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,18 +18,18 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Controller strictly dedicated to Admin-only Excel Bulk Student Profile Import.
- * Faculty role access is prohibited with HTTP 403 Forbidden.
+ * Controller dedicated to Faculty Excel Bulk Student Profile Import.
+ * Destination section is strictly bound to the authenticated Faculty's active assigned section(s).
  */
 @RestController
-@RequestMapping({"/api/admin/students/import", "/api/students/import"})
-@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN') or hasAnyAuthority('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ADMIN', 'SUPER_ADMIN')")
-public class StudentImportController {
+@RequestMapping("/api/faculty/students/import")
+@PreAuthorize("hasAnyRole('FACULTY', 'ADMIN') or hasAnyAuthority('ROLE_FACULTY', 'ROLE_ADMIN', 'FACULTY', 'ADMIN')")
+public class FacultyStudentImportController {
 
     private final StudentImportService importService;
 
     @Autowired
-    public StudentImportController(StudentImportService importService) {
+    public FacultyStudentImportController(StudentImportService importService) {
         this.importService = importService;
     }
 
@@ -50,34 +49,33 @@ public class StudentImportController {
 
     /**
      * Step 1: Upload Excel file for validation and preview.
-     * Validates destination section and student row integrity. Does not modify database records.
+     * Destination is automatically determined by the authenticated faculty's assignment.
      */
     @PostMapping(value = "/validate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<StudentImportPreviewResponse> validateImport(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "branchGroup", required = false) String branchGroup,
-            @RequestParam(value = "intermediateYear", required = false) String intermediateYear,
-            @RequestParam(value = "section", required = false) String section
+            @RequestParam(value = "assignmentId", required = false) Long assignmentId,
+            Authentication authentication
     ) {
-        StudentImportPreviewResponse preview = importService.validateAdminImport(file, branchGroup, intermediateYear, section);
+        String facultyEmail = authentication != null ? authentication.getName() : null;
+        StudentImportPreviewResponse preview = importService.validateFacultyImport(file, assignmentId, facultyEmail);
         return ResponseEntity.ok(preview);
     }
 
     /**
      * Step 2: Confirm import and execute transactional batch creation in database.
+     * All students are assigned to the authenticated faculty's assigned section.
      */
     @PostMapping(value = "/confirm", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<StudentImportResultResponse> confirmImport(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "branchGroup", required = false) String branchGroup,
-            @RequestParam(value = "intermediateYear", required = false) String intermediateYear,
-            @RequestParam(value = "section", required = false) String section,
+            @RequestParam(value = "assignmentId", required = false) Long assignmentId,
             @RequestParam(value = "skipDuplicates", defaultValue = "true") boolean skipDuplicates,
             @RequestParam(value = "updateExisting", defaultValue = "false") boolean updateExisting,
-            org.springframework.security.core.Authentication authentication
+            Authentication authentication
     ) {
-        String adminEmail = authentication != null ? authentication.getName() : null;
-        StudentImportResultResponse result = importService.confirmAdminImport(file, branchGroup, intermediateYear, section, skipDuplicates, updateExisting, adminEmail);
+        String facultyEmail = authentication != null ? authentication.getName() : null;
+        StudentImportResultResponse result = importService.confirmFacultyImport(file, assignmentId, skipDuplicates, updateExisting, facultyEmail);
         return ResponseEntity.ok(result);
     }
 

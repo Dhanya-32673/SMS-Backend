@@ -13,6 +13,12 @@ public class StudentImportResultResponse {
     private String message;
     private List<StudentImportRowDto> failedRows = new ArrayList<>();
 
+    private String targetGroup;
+    private String targetYear;
+    private String targetSection;
+    private String targetAcademicYear;
+    private String creatorRole;
+
     public StudentImportResultResponse() {
     }
 
@@ -36,4 +42,19 @@ public class StudentImportResultResponse {
 
     public List<StudentImportRowDto> getFailedRows() { return failedRows; }
     public void setFailedRows(List<StudentImportRowDto> failedRows) { this.failedRows = failedRows; }
+
+    public String getTargetGroup() { return targetGroup; }
+    public void setTargetGroup(String targetGroup) { this.targetGroup = targetGroup; }
+
+    public String getTargetYear() { return targetYear; }
+    public void setTargetYear(String targetYear) { this.targetYear = targetYear; }
+
+    public String getTargetSection() { return targetSection; }
+    public void setTargetSection(String targetSection) { this.targetSection = targetSection; }
+
+    public String getTargetAcademicYear() { return targetAcademicYear; }
+    public void setTargetAcademicYear(String targetAcademicYear) { this.targetAcademicYear = targetAcademicYear; }
+
+    public String getCreatorRole() { return creatorRole; }
+    public void setCreatorRole(String creatorRole) { this.creatorRole = creatorRole; }
 }

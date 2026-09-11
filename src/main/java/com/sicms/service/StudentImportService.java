@@ -8,9 +8,11 @@ import com.sicms.repository.*;
 import com.sicms.util.StudentExcelImportHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -32,6 +34,8 @@ public class StudentImportService {
     private final UserRepository userRepository;
     private final StudentIdGeneratorService idGeneratorService;
     private final ExportAuditLogRepository auditLogRepository;
+    private final FacultyService facultyService;
+    private final FacultyAssignmentRepository assignmentRepository;
 
     @Autowired
     public StudentImportService(
@@ -40,7 +44,9 @@ public class StudentImportService {
             AcademicSectionRepository sectionRepository,
             UserRepository userRepository,
             StudentIdGeneratorService idGeneratorService,
-            ExportAuditLogRepository auditLogRepository
+            ExportAuditLogRepository auditLogRepository,
+            @Autowired(required = false) FacultyService facultyService,
+            @Autowired(required = false) FacultyAssignmentRepository assignmentRepository
     ) {
         this.studentRepository = studentRepository;
         this.groupRepository = groupRepository;
@@ -48,6 +54,44 @@ public class StudentImportService {
         this.userRepository = userRepository;
         this.idGeneratorService = idGeneratorService;
         this.auditLogRepository = auditLogRepository;
+        this.facultyService = facultyService;
+        this.assignmentRepository = assignmentRepository;
+    }
+
+    public StudentImportService(
+            StudentRepository studentRepository,
+            AcademicGroupRepository groupRepository,
+            AcademicSectionRepository sectionRepository,
+            UserRepository userRepository,
+            StudentIdGeneratorService idGeneratorService,
+            ExportAuditLogRepository auditLogRepository
+    ) {
+        this(studentRepository, groupRepository, sectionRepository, userRepository, idGeneratorService, auditLogRepository, null, null);
+    }
+
+    /**
+     * Normalizes section strings by trimming and stripping "Section " prefix if present.
+     */
+    public String normalizeSectionName(String raw) {
+        if (raw == null) return "";
+        return raw.trim().replaceAll("(?i)^section\\s+", "").trim().toUpperCase();
+    }
+
+    /**
+     * Resolves an AcademicSection matching branchGroup, intermediateYear, and section name.
+     */
+    public AcademicSection resolveSection(String branchGroup, String intermediateYear, String section) {
+        if (sectionRepository == null) return null;
+        String cleanSec = normalizeSectionName(section);
+        String cleanGrp = branchGroup != null ? branchGroup.trim().toUpperCase() : "";
+        String cleanYr = intermediateYear != null ? intermediateYear.trim() : "";
+
+        return sectionRepository.findByActiveTrue().stream()
+                .filter(s -> (cleanGrp.isEmpty() || s.getBranchGroup().trim().equalsIgnoreCase(cleanGrp))
+                        && (cleanYr.isEmpty() || s.getIntermediateYear().trim().equalsIgnoreCase(cleanYr))
+                        && (normalizeSectionName(s.getName()).equalsIgnoreCase(cleanSec) || s.getName().trim().equalsIgnoreCase(section != null ? section.trim() : "")))
+                .findFirst()
+                .orElse(null);
     }
 
     /**
@@ -58,11 +102,106 @@ public class StudentImportService {
     }
 
     /**
-     * Step 1: Validates an uploaded Excel file and returns row-by-row preview results.
-     * Does NOT write anything to the database.
+     * Step 1: Validates an uploaded Excel file (default/admin without destination override).
      */
     @Transactional(readOnly = true)
     public StudentImportPreviewResponse validateImport(MultipartFile file) {
+        return validateAdminImport(file, null, null, null);
+    }
+
+    /**
+     * Admin Validation: Validates uploaded Excel file with selected Group, Year, and Section.
+     */
+    @Transactional(readOnly = true)
+    public StudentImportPreviewResponse validateAdminImport(
+            MultipartFile file,
+            String branchGroup,
+            String intermediateYear,
+            String section
+    ) {
+        AcademicSection targetSection = null;
+        if (branchGroup != null && !branchGroup.isBlank() && section != null && !section.isBlank()) {
+            AcademicGroup grp = groupRepository.findByActiveTrue().stream()
+                    .filter(g -> g.getCode().trim().equalsIgnoreCase(branchGroup.trim()))
+                    .findFirst()
+                    .orElse(null);
+            if (grp == null) {
+                StudentImportPreviewResponse res = new StudentImportPreviewResponse();
+                res.getHeaderErrors().add("Selected Academic Group '" + branchGroup + "' does not exist or is inactive.");
+                res.setCanProceed(false);
+                return res;
+            }
+
+            targetSection = resolveSection(branchGroup, intermediateYear, section);
+            if (targetSection == null) {
+                StudentImportPreviewResponse res = new StudentImportPreviewResponse();
+                res.getHeaderErrors().add("Selected Section '" + section + "' does not exist for Group '" + branchGroup + "' and Year '" + intermediateYear + "'.");
+                res.setCanProceed(false);
+                return res;
+            }
+        }
+
+        StudentImportPreviewResponse response = validateImportInternal(file, targetSection, null, "ROLE_ADMIN");
+        if (targetSection != null) {
+            response.setTargetGroup(targetSection.getBranchGroup());
+            response.setTargetYear(targetSection.getIntermediateYear());
+            response.setTargetSection(targetSection.getName());
+            response.setTargetAcademicYear(targetSection.getAcademicYear());
+        } else if (branchGroup != null && !branchGroup.isBlank()) {
+            response.setTargetGroup(branchGroup);
+            response.setTargetYear(intermediateYear);
+            response.setTargetSection(section);
+        }
+        response.setRole("ROLE_ADMIN");
+        return response;
+    }
+
+    /**
+     * Faculty Validation: Validates uploaded Excel file using the authenticated faculty member's assigned section.
+     */
+    @Transactional(readOnly = true)
+    public StudentImportPreviewResponse validateFacultyImport(
+            MultipartFile file,
+            Long assignmentId,
+            String facultyEmail
+    ) {
+        if (facultyService == null || assignmentRepository == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Faculty service not available.");
+        }
+        Faculty faculty = facultyService.getFacultyByUserEmail(facultyEmail);
+        List<FacultyAssignment> activeAssignments = assignmentRepository.findActiveByFacultyId(faculty.getId());
+        if (activeAssignments == null || activeAssignments.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No active academic sections assigned to your faculty account. Please contact administrator.");
+        }
+
+        FacultyAssignment targetAssignment;
+        if (assignmentId != null) {
+            targetAssignment = activeAssignments.stream()
+                    .filter(a -> a.getId().equals(assignmentId))
+                    .findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not authorized to import students into this section."));
+        } else {
+            targetAssignment = activeAssignments.get(0);
+        }
+
+        AcademicSection targetSection = resolveSection(targetAssignment.getBranchGroup(), targetAssignment.getIntermediateYear(), targetAssignment.getSection());
+
+        StudentImportPreviewResponse response = validateImportInternal(file, targetSection, targetAssignment, "ROLE_FACULTY");
+        response.setTargetGroup(targetAssignment.getBranchGroup());
+        response.setTargetYear(targetAssignment.getIntermediateYear());
+        response.setTargetSection(targetAssignment.getSection());
+        response.setTargetAcademicYear(targetAssignment.getAcademicYear());
+        response.setAssignedFacultyName(faculty.getFullName());
+        response.setRole("ROLE_FACULTY");
+        return response;
+    }
+
+    private StudentImportPreviewResponse validateImportInternal(
+            MultipartFile file,
+            AcademicSection targetSection,
+            FacultyAssignment targetAssignment,
+            String role
+    ) {
         StudentImportPreviewResponse response = new StudentImportPreviewResponse();
 
         if (file == null || file.isEmpty()) {
@@ -123,6 +262,23 @@ public class StudentImportService {
         int duplicateCount = 0;
 
         for (StudentImportRowDto row : rows) {
+            // Apply target assignment if present
+            if (targetSection != null) {
+                row.setBranchGroup(targetSection.getBranchGroup());
+                row.setIntermediateYear(targetSection.getIntermediateYear());
+                row.setSection(targetSection.getName());
+                if (targetSection.getAcademicYear() != null && !targetSection.getAcademicYear().isBlank()) {
+                    row.setAcademicYear(targetSection.getAcademicYear());
+                }
+            } else if (targetAssignment != null) {
+                row.setBranchGroup(targetAssignment.getBranchGroup());
+                row.setIntermediateYear(targetAssignment.getIntermediateYear());
+                row.setSection(targetAssignment.getSection());
+                if (targetAssignment.getAcademicYear() != null && !targetAssignment.getAcademicYear().isBlank()) {
+                    row.setAcademicYear(targetAssignment.getAcademicYear());
+                }
+            }
+
             validateRow(row, validGroups, validSectionNames, allSections, fileRolls, fileAdmissions, fileStudentIds);
 
             if ("DUPLICATE".equals(row.getStatus())) {
@@ -145,15 +301,87 @@ public class StudentImportService {
     }
 
     /**
-     * Step 2: Confirms the import and executes transactional batch creation.
+     * Step 2: Confirms the import (default / backward compatible).
      */
     @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public StudentImportResultResponse confirmImport(
             MultipartFile file,
             boolean skipDuplicates,
             boolean updateExisting,
             String currentUserEmail
+    ) {
+        return confirmAdminImport(file, null, null, null, skipDuplicates, updateExisting, currentUserEmail);
+    }
+
+    /**
+     * Admin Confirmation: Confirms import with selected Group, Year, and Section.
+     */
+    @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
+    @Transactional(rollbackFor = Exception.class)
+    public StudentImportResultResponse confirmAdminImport(
+            MultipartFile file,
+            String branchGroup,
+            String intermediateYear,
+            String section,
+            boolean skipDuplicates,
+            boolean updateExisting,
+            String adminEmail
+    ) {
+        AcademicSection targetSection = null;
+        if (branchGroup != null && !branchGroup.isBlank() && section != null && !section.isBlank()) {
+            targetSection = resolveSection(branchGroup, intermediateYear, section);
+            if (targetSection == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Section '" + section + "' is invalid or does not exist for the selected Group and Year.");
+            }
+        }
+        return confirmImportInternal(file, targetSection, null, skipDuplicates, updateExisting, adminEmail, "ROLE_ADMIN");
+    }
+
+    /**
+     * Faculty Confirmation: Confirms import with authenticated Faculty assignment.
+     */
+    @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
+    @Transactional(rollbackFor = Exception.class)
+    public StudentImportResultResponse confirmFacultyImport(
+            MultipartFile file,
+            Long assignmentId,
+            boolean skipDuplicates,
+            boolean updateExisting,
+            String facultyEmail
+    ) {
+        if (facultyService == null || assignmentRepository == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Faculty service not available.");
+        }
+        Faculty faculty = facultyService.getFacultyByUserEmail(facultyEmail);
+        List<FacultyAssignment> activeAssignments = assignmentRepository.findActiveByFacultyId(faculty.getId());
+        if (activeAssignments == null || activeAssignments.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No active academic sections assigned to your faculty account.");
+        }
+
+        FacultyAssignment targetAssignment;
+        if (assignmentId != null) {
+            targetAssignment = activeAssignments.stream()
+                    .filter(a -> a.getId().equals(assignmentId))
+                    .findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not authorized to import students into this section."));
+        } else {
+            targetAssignment = activeAssignments.get(0);
+        }
+
+        AcademicSection targetSection = resolveSection(targetAssignment.getBranchGroup(), targetAssignment.getIntermediateYear(), targetAssignment.getSection());
+
+        return confirmImportInternal(file, targetSection, targetAssignment, skipDuplicates, updateExisting, facultyEmail, "ROLE_FACULTY");
+    }
+
+    private StudentImportResultResponse confirmImportInternal(
+            MultipartFile file,
+            AcademicSection targetSection,
+            FacultyAssignment targetAssignment,
+            boolean skipDuplicates,
+            boolean updateExisting,
+            String currentUserEmail,
+            String role
     ) {
         StudentImportResultResponse result = new StudentImportResultResponse();
 
@@ -176,7 +404,7 @@ public class StudentImportService {
             return result;
         }
 
-        User adminUser = currentUserEmail != null
+        User creatorUser = currentUserEmail != null
                 ? userRepository.findByEmailIgnoreCase(currentUserEmail).orElse(null)
                 : null;
 
@@ -200,6 +428,23 @@ public class StudentImportService {
         List<StudentImportRowDto> failedRows = new ArrayList<>();
 
         for (StudentImportRowDto row : rows) {
+            // Apply target assignment if present
+            if (targetSection != null) {
+                row.setBranchGroup(targetSection.getBranchGroup());
+                row.setIntermediateYear(targetSection.getIntermediateYear());
+                row.setSection(targetSection.getName());
+                if (targetSection.getAcademicYear() != null && !targetSection.getAcademicYear().isBlank()) {
+                    row.setAcademicYear(targetSection.getAcademicYear());
+                }
+            } else if (targetAssignment != null) {
+                row.setBranchGroup(targetAssignment.getBranchGroup());
+                row.setIntermediateYear(targetAssignment.getIntermediateYear());
+                row.setSection(targetAssignment.getSection());
+                if (targetAssignment.getAcademicYear() != null && !targetAssignment.getAcademicYear().isBlank()) {
+                    row.setAcademicYear(targetAssignment.getAcademicYear());
+                }
+            }
+
             validateRow(row, validGroups, validSectionNames, allSections, fileRolls, fileAdmissions, fileStudentIds);
 
             if ("ERROR".equals(row.getStatus())) {
@@ -211,7 +456,7 @@ public class StudentImportService {
             if ("DUPLICATE".equals(row.getStatus())) {
                 if (updateExisting) {
                     try {
-                        updateExistingStudent(row, adminUser);
+                        updateExistingStudent(row, creatorUser);
                         updatedCount++;
                     } catch (Exception ex) {
                         row.addError("Update failed: " + ex.getMessage());
@@ -229,7 +474,7 @@ public class StudentImportService {
 
             // Create new student
             try {
-                createNewStudent(row, adminUser);
+                createNewStudent(row, creatorUser);
                 importedCount++;
             } catch (Exception ex) {
                 row.addError("Creation failed: " + ex.getMessage());
@@ -244,16 +489,29 @@ public class StudentImportService {
         result.setSkippedCount(skippedCount);
         result.setFailedCount(failedCount);
         result.setFailedRows(failedRows);
+        result.setCreatorRole(role);
+
+        String grp = targetSection != null ? targetSection.getBranchGroup() : (targetAssignment != null ? targetAssignment.getBranchGroup() : null);
+        String yr = targetSection != null ? targetSection.getIntermediateYear() : (targetAssignment != null ? targetAssignment.getIntermediateYear() : null);
+        String sec = targetSection != null ? targetSection.getName() : (targetAssignment != null ? targetAssignment.getSection() : null);
+        String ay = targetSection != null ? targetSection.getAcademicYear() : (targetAssignment != null ? targetAssignment.getAcademicYear() : null);
+
+        result.setTargetGroup(grp);
+        result.setTargetYear(yr);
+        result.setTargetSection(sec);
+        result.setTargetAcademicYear(ay);
+
         result.setMessage(String.format("Import completed: %d created, %d updated, %d skipped, %d failed.",
                 importedCount, updatedCount, skippedCount, failedCount));
 
         // Audit Logging
         try {
+            String destDesc = (grp != null && sec != null) ? " [" + grp + "-" + yr + "-" + sec + "]" : "";
             ExportAuditLog log = new ExportAuditLog(
-                    adminUser != null ? adminUser.getId() : null,
-                    currentUserEmail != null ? currentUserEmail : "ADMIN",
-                    "IMPORT_EXCEL",
-                    "BULK_IMPORT: " + (file.getOriginalFilename() != null ? file.getOriginalFilename() : "file.xlsx"),
+                    creatorUser != null ? creatorUser.getId() : null,
+                    currentUserEmail != null ? currentUserEmail : role,
+                    role,
+                    "BULK_IMPORT: " + (file.getOriginalFilename() != null ? file.getOriginalFilename() : "file.xlsx") + destDesc,
                     importedCount + updatedCount,
                     "SYSTEM"
             );

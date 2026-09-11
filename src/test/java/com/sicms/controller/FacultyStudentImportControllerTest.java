@@ -22,23 +22,25 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-public class StudentImportControllerTest {
+public class FacultyStudentImportControllerTest {
 
     private MockMvc mockMvc;
-    private TestableStudentImportService testableService;
-    private StudentImportController controller;
+    private TestableFacultyStudentImportService testableService;
+    private FacultyStudentImportController controller;
 
-    static class TestableStudentImportService extends StudentImportService {
+    static class TestableFacultyStudentImportService extends StudentImportService {
         AtomicBoolean templateCalled = new AtomicBoolean(false);
         AtomicBoolean validateCalled = new AtomicBoolean(false);
         AtomicBoolean confirmCalled = new AtomicBoolean(false);
         AtomicBoolean errorReportCalled = new AtomicBoolean(false);
 
-        public TestableStudentImportService() {
-            super(null, null, null, null, null, null);
+        public TestableFacultyStudentImportService() {
+            super(null, null, null, null, null, null, null, null);
         }
 
         @Override
@@ -48,39 +50,31 @@ public class StudentImportControllerTest {
         }
 
         @Override
-        public StudentImportPreviewResponse validateImport(MultipartFile file) {
-            return validateAdminImport(file, null, null, null);
-        }
-
-        @Override
-        public StudentImportPreviewResponse validateAdminImport(MultipartFile file, String branchGroup, String intermediateYear, String section) {
+        public StudentImportPreviewResponse validateFacultyImport(MultipartFile file, Long assignmentId, String facultyEmail) {
             validateCalled.set(true);
             StudentImportPreviewResponse preview = new StudentImportPreviewResponse();
             preview.setFileName(file.getOriginalFilename());
             preview.setTotalRows(1);
             preview.setValidRows(1);
             preview.setCanProceed(true);
-            preview.setTargetGroup(branchGroup);
-            preview.setTargetYear(intermediateYear);
-            preview.setTargetSection(section);
+            preview.setTargetGroup("MPC");
+            preview.setTargetYear("1st Year");
+            preview.setTargetSection("Section B");
+            preview.setRole("ROLE_FACULTY");
             return preview;
         }
 
         @Override
-        public StudentImportResultResponse confirmImport(MultipartFile file, boolean skipDuplicates, boolean updateExisting, String currentUserEmail) {
-            return confirmAdminImport(file, null, null, null, skipDuplicates, updateExisting, currentUserEmail);
-        }
-
-        @Override
-        public StudentImportResultResponse confirmAdminImport(MultipartFile file, String branchGroup, String intermediateYear, String section, boolean skipDuplicates, boolean updateExisting, String adminEmail) {
+        public StudentImportResultResponse confirmFacultyImport(MultipartFile file, Long assignmentId, boolean skipDuplicates, boolean updateExisting, String facultyEmail) {
             confirmCalled.set(true);
             StudentImportResultResponse res = new StudentImportResultResponse();
-            res.setTotalRows(5);
-            res.setImportedCount(5);
-            res.setMessage("Import completed: 5 created.");
-            res.setTargetGroup(branchGroup);
-            res.setTargetYear(intermediateYear);
-            res.setTargetSection(section);
+            res.setTotalRows(1);
+            res.setImportedCount(1);
+            res.setTargetGroup("MPC");
+            res.setTargetYear("1st Year");
+            res.setTargetSection("Section B");
+            res.setCreatorRole("ROLE_FACULTY");
+            res.setMessage("Import completed: 1 created.");
             return res;
         }
 
@@ -93,15 +87,15 @@ public class StudentImportControllerTest {
 
     @BeforeEach
     public void setup() {
-        testableService = new TestableStudentImportService();
-        controller = new StudentImportController(testableService);
+        testableService = new TestableFacultyStudentImportService();
+        controller = new FacultyStudentImportController(testableService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
     @Test
-    @DisplayName("Download Template: Streams Excel with Content-Disposition")
+    @DisplayName("Download Template: Streams Excel with Content-Disposition for Faculty")
     public void testDownloadTemplate() throws Exception {
-        mockMvc.perform(get("/api/admin/students/import/template"))
+        mockMvc.perform(get("/api/faculty/students/import/template"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"Student_Registration_Template.xlsx\""));
@@ -110,59 +104,72 @@ public class StudentImportControllerTest {
     }
 
     @Test
-    @DisplayName("Validate Import: Parses uploaded Excel and returns preview response")
-    public void testValidateImport() throws Exception {
+    @DisplayName("Validate Faculty Import: Binds authenticated faculty assignment")
+    public void testValidateFacultyImport() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
                 "file",
-                "students.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "excel-data".getBytes()
-        );
-
-        mockMvc.perform(multipart("/api/admin/students/import/validate").file(file))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.fileName").value("students.xlsx"))
-                .andExpect(jsonPath("$.totalRows").value(1))
-                .andExpect(jsonPath("$.validRows").value(1))
-                .andExpect(jsonPath("$.canProceed").value(true));
-
-        assertTrue(testableService.validateCalled.get());
-    }
-
-    @Test
-    @DisplayName("Confirm Import: Executes batch creation and returns result summary")
-    public void testConfirmImport() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "students.xlsx",
+                "faculty_students.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "excel-data".getBytes()
         );
 
         UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                "admin@college.edu", "password", List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+                "faculty@college.edu",
+                "N/A",
+                List.of(new SimpleGrantedAuthority("ROLE_FACULTY"))
         );
 
-        mockMvc.perform(multipart("/api/admin/students/import/confirm")
+        mockMvc.perform(multipart("/api/faculty/students/import/validate")
                         .file(file)
-                        .param("skipDuplicates", "true")
-                        .param("updateExisting", "false")
                         .principal(auth))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalRows").value(5))
-                .andExpect(jsonPath("$.importedCount").value(5));
+                .andExpect(jsonPath("$.fileName").value("faculty_students.xlsx"))
+                .andExpect(jsonPath("$.targetGroup").value("MPC"))
+                .andExpect(jsonPath("$.targetYear").value("1st Year"))
+                .andExpect(jsonPath("$.targetSection").value("Section B"))
+                .andExpect(jsonPath("$.role").value("ROLE_FACULTY"));
+
+        assertTrue(testableService.validateCalled.get());
+    }
+
+    @Test
+    @DisplayName("Confirm Faculty Import: Creates students in faculty assigned section")
+    public void testConfirmFacultyImport() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "faculty_students.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "excel-data".getBytes()
+        );
+
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                "faculty@college.edu",
+                "N/A",
+                List.of(new SimpleGrantedAuthority("ROLE_FACULTY"))
+        );
+
+        mockMvc.perform(multipart("/api/faculty/students/import/confirm")
+                        .file(file)
+                        .param("skipDuplicates", "true")
+                        .principal(auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.importedCount").value(1))
+                .andExpect(jsonPath("$.targetGroup").value("MPC"))
+                .andExpect(jsonPath("$.targetSection").value("Section B"))
+                .andExpect(jsonPath("$.creatorRole").value("ROLE_FACULTY"));
 
         assertTrue(testableService.confirmCalled.get());
     }
 
     @Test
-    @DisplayName("Download Error Report: Streams error Excel with Content-Disposition")
-    public void testDownloadErrorReport() throws Exception {
-        mockMvc.perform(post("/api/admin/students/import/error-report")
+    @DisplayName("Error Report: Streams error report workbook")
+    public void testErrorReport() throws Exception {
+        String jsonPayload = "[{\"rowNumber\":2,\"studentId\":\"STU999\",\"fullName\":\"Test Student\",\"errors\":[\"Invalid Email\"]}]";
+
+        mockMvc.perform(post("/api/faculty/students/import/error-report")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("[]"))
+                        .content(jsonPayload))
                 .andExpect(status().isOk())
-                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"Student_Import_Errors.xlsx\""));
 
         assertTrue(testableService.errorReportCalled.get());

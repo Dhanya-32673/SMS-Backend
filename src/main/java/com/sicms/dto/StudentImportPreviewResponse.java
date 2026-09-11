@@ -15,6 +15,13 @@ public class StudentImportPreviewResponse {
     private List<StudentImportRowDto> preview = new ArrayList<>();
     private List<String> headerErrors = new ArrayList<>();
 
+    private String targetGroup;
+    private String targetYear;
+    private String targetSection;
+    private String targetAcademicYear;
+    private String assignedFacultyName;
+    private String role;
+
     public StudentImportPreviewResponse() {
     }
 
@@ -44,4 +51,22 @@ public class StudentImportPreviewResponse {
 
     public List<String> getHeaderErrors() { return headerErrors; }
     public void setHeaderErrors(List<String> headerErrors) { this.headerErrors = headerErrors; }
+
+    public String getTargetGroup() { return targetGroup; }
+    public void setTargetGroup(String targetGroup) { this.targetGroup = targetGroup; }
+
+    public String getTargetYear() { return targetYear; }
+    public void setTargetYear(String targetYear) { this.targetYear = targetYear; }
+
+    public String getTargetSection() { return targetSection; }
+    public void setTargetSection(String targetSection) { this.targetSection = targetSection; }
+
+    public String getTargetAcademicYear() { return targetAcademicYear; }
+    public void setTargetAcademicYear(String targetAcademicYear) { this.targetAcademicYear = targetAcademicYear; }
+
+    public String getAssignedFacultyName() { return assignedFacultyName; }
+    public void setAssignedFacultyName(String assignedFacultyName) { this.assignedFacultyName = assignedFacultyName; }
+
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
 }
