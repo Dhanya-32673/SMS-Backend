@@ -47,6 +47,9 @@ import com.sicms.repository.ExportAuditLogRepository;
 import com.sicms.repository.StudentRepository;
 import com.sicms.repository.UserRepository;
 import com.sicms.repository.DocumentVersionRepository;
+import com.sicms.repository.RefreshTokenRepository;
+import com.sicms.repository.PasswordResetOtpRepository;
+import com.sicms.repository.OtpRepository;
 import com.sicms.entity.DocumentVersion;
 
 @Service
@@ -66,6 +69,9 @@ public class StudentService {
     private final DocumentTypeRepository documentTypeRepository;
     private final ExportAuditLogRepository exportAuditLogRepository;
     private final AcademicGroupRepository academicGroupRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final PasswordResetOtpRepository passwordResetOtpRepository;
+    private final OtpRepository otpRepository;
 
     @Autowired
     public StudentService(
@@ -82,7 +88,10 @@ public class StudentService {
             StudentPhotoService photoService,
             DocumentTypeRepository documentTypeRepository,
             ExportAuditLogRepository exportAuditLogRepository,
-            AcademicGroupRepository academicGroupRepository
+            AcademicGroupRepository academicGroupRepository,
+            RefreshTokenRepository refreshTokenRepository,
+            PasswordResetOtpRepository passwordResetOtpRepository,
+            OtpRepository otpRepository
     ) {
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
@@ -98,6 +107,9 @@ public class StudentService {
         this.documentTypeRepository = documentTypeRepository;
         this.exportAuditLogRepository = exportAuditLogRepository;
         this.academicGroupRepository = academicGroupRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.passwordResetOtpRepository = passwordResetOtpRepository;
+        this.otpRepository = otpRepository;
     }
 
     public static String formatDobPassword(LocalDate dob) {
@@ -507,7 +519,7 @@ public class StudentService {
     @Transactional
     public boolean deleteStudent(String studentId) {
         if (studentId == null || studentId.isBlank()) {
-            return false;
+            throw new StudentNotFoundException("Student ID must not be blank.");
         }
 
         String clean = studentId.trim();
@@ -526,16 +538,20 @@ public class StudentService {
 
         if (student == null) {
             System.out.println(">>> [DELETE STUDENT] Student record not found for query: " + studentId);
-            return false;
+            throw new StudentNotFoundException("Student not found with ID: " + studentId);
         }
 
+        Long studentDbId = student.getId();
         String actualStudentId = student.getStudentId();
-        System.out.println(">>> [DELETE STUDENT] Deleting student record: " + actualStudentId + " (DB ID: " + student.getId() + ")");
+        System.out.println(">>> [DELETE STUDENT] Deleting student id=" + studentDbId + " (" + actualStudentId + ")");
 
-        // 1. Delete all student documents and versions safely
+        // 1. Fetch linked user accounts via the database relationship (User.student = student)
+        List<User> linkedUsers = userRepository.findByStudent(student);
+
+        // 2. Delete all student documents and versions safely (Supabase storage + DB records)
         List<StudentDocument> documents = documentRepository.findByStudent_StudentId(actualStudentId);
         if (documents.isEmpty()) {
-            documents = documentRepository.findByStudentId(student.getId());
+            documents = documentRepository.findByStudentId(studentDbId);
         }
 
         for (StudentDocument doc : documents) {
@@ -558,7 +574,7 @@ public class StudentService {
             documentRepository.delete(doc);
         }
 
-        // 2. Delete student profile photo from Supabase Storage safely
+        // 3. Delete student profile photo from Supabase Storage safely
         String profilePhotoUrl = student.getProfilePhotoUrl();
         if (profilePhotoUrl != null && !profilePhotoUrl.isBlank()) {
             try {
@@ -566,31 +582,43 @@ public class StudentService {
             } catch (Exception ignored) {}
         }
 
-        // 3. Unlink and disable any linked user accounts to prevent foreign key constraint violations
-        try {
-            List<User> linkedUsers = userRepository.findByStudent(student);
+        // 4. In order to delete the student without foreign key violation from users.student_id (ON DELETE NO ACTION),
+        // unlink the student reference on each linked user within this transaction before student record deletion.
+        if (linkedUsers != null && !linkedUsers.isEmpty()) {
             for (User u : linkedUsers) {
                 u.setStudent(null);
-                u.setAccountEnabled(false);
                 userRepository.save(u);
             }
-        } catch (Exception ignored) {}
-
-        if (student.getEmailAddress1() != null) {
-            String email = student.getEmailAddress1();
-            try {
-                userRepository.findByEmailIgnoreCase(email).ifPresent(user -> {
-                    user.setStudent(null);
-                    user.setAccountEnabled(false);
-                    userRepository.save(user);
-                });
-            } catch (Exception ignored) {}
+            userRepository.flush();
         }
 
-        // 4. Delete student database record
+        // 5. Delete student record from students table
         studentRepository.delete(student);
+        studentRepository.flush();
 
-        System.out.println(">>> [DELETE STUDENT] Successfully deleted student: " + actualStudentId);
+        // 6. Delete linked user accounts and clean their foreign key dependencies
+        if (linkedUsers != null && !linkedUsers.isEmpty()) {
+            for (User u : linkedUsers) {
+                Long userId = u.getId();
+                System.out.println(">>> [DELETE STUDENT] Deleting linked user id=" + userId + " for student id=" + studentDbId);
+
+                // Clear user foreign key references in other tables
+                studentRepository.clearCreatedByForUser(userId);
+                exportAuditLogRepository.clearUserReferences(userId);
+                refreshTokenRepository.deleteByUser(u);
+                passwordResetOtpRepository.deleteByUser(u);
+                otpRepository.deleteByUser(u);
+
+                // Permanently delete user record
+                userRepository.delete(u);
+                userRepository.flush();
+                System.out.println(">>> [DELETE STUDENT] Linked user id=" + userId + " deleted successfully");
+            }
+        } else {
+            System.out.println(">>> [DELETE STUDENT] No linked user account found for student id=" + studentDbId + " (legacy/imported student)");
+        }
+
+        System.out.println(">>> [DELETE STUDENT] Student id=" + studentDbId + " (" + actualStudentId + ") deleted successfully");
         return true;
     }
 
@@ -614,9 +642,13 @@ public class StudentService {
         System.out.println(">>> [BULK DELETE SERVICE] Processing " + cleanIds.size() + " student IDs: " + cleanIds);
         int deletedCount = 0;
         for (String id : cleanIds) {
-            boolean success = deleteStudent(id);
-            if (success) {
-                deletedCount++;
+            try {
+                boolean success = deleteStudent(id);
+                if (success) {
+                    deletedCount++;
+                }
+            } catch (StudentNotFoundException e) {
+                System.out.println(">>> [BULK DELETE SERVICE] Student not found for ID: " + id + ", skipping.");
             }
         }
         System.out.println(">>> [BULK DELETE SERVICE] Successfully deleted " + deletedCount + " out of " + cleanIds.size() + " students.");
