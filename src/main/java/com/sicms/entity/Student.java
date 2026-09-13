@@ -130,6 +130,10 @@ public class Student {
     @JoinColumn(name = "created_by")
     private User createdBy;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @OneToMany(mappedBy = "student", fetch = FetchType.LAZY)
+    private java.util.List<User> users = new java.util.ArrayList<>();
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -390,5 +394,17 @@ public class Student {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public java.util.List<User> getUsers() {
+        return users;
+    }
+
+    public void setUsers(java.util.List<User> users) {
+        this.users = users;
+    }
+
+    public User getUser() {
+        return (users != null && !users.isEmpty()) ? users.get(0) : null;
     }
 }

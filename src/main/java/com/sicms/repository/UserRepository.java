@@ -26,4 +26,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByRoleRoleName(String roleName);
 
     java.util.List<User> findByStudent(com.sicms.entity.Student student);
+
+    java.util.List<User> findByStudent_Id(Long studentId);
 }
