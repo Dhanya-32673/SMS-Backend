@@ -262,10 +262,4 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            "WHERE s.status = com.sicms.entity.StudentStatus.ACTIVE AND s.campus IS NOT NULL AND TRIM(s.campus) <> '' " +
            "GROUP BY LOWER(TRIM(s.campus))")
     List<Object[]> countStudentsGroupedByCampus();
-
-    @Query("SELECT DISTINCT TRIM(s.intermediateYear) FROM Student s WHERE " +
-           "(:campus IS NULL OR :campus = '' OR LOWER(TRIM(s.campus)) = LOWER(TRIM(:campus))) AND " +
-           "LOWER(TRIM(s.branchGroup)) = LOWER(TRIM(:group)) AND " +
-           "s.intermediateYear IS NOT NULL AND TRIM(s.intermediateYear) <> ''")
-    List<String> findDistinctIntermediateYearsByCampusAndGroup(@Param("campus") String campus, @Param("group") String group);
 }

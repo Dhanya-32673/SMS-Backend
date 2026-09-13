@@ -17,7 +17,9 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,72 +45,6 @@ public class AcademicGroupService {
     @Transactional(readOnly = true)
     public List<AcademicGroup> getAllGroups() {
         return groupRepository.findAll();
-    }
-
-    @Transactional(readOnly = true)
-    public List<AcademicGroup> getGroups(String campus) {
-        List<AcademicGroup> allActive = groupRepository.findByActiveTrue();
-        if (campus == null || campus.isBlank()) {
-            return allActive;
-        }
-        return allActive;
-    }
-
-    @Transactional(readOnly = true)
-    public List<String> getDistinctAcademicYears(String campus, String group) {
-        if (group == null || group.isBlank()) {
-            return Collections.emptyList();
-        }
-
-        String cleanGroup = group.trim();
-        String cleanCampus = campus != null && !campus.isBlank() ? campus.trim() : null;
-
-        Set<String> resultSet = new LinkedHashSet<>();
-
-        // 1. Fetch distinct intermediate years from AcademicSection
-        List<String> sectionYears = sectionRepository.findDistinctIntermediateYearsByGroup(cleanGroup);
-        if (sectionYears != null) {
-            for (String y : sectionYears) {
-                if (y != null && !y.isBlank()) {
-                    resultSet.add(y.trim());
-                }
-            }
-        }
-
-        // 2. Fetch distinct intermediate years from Student records (for campus-specific data)
-        List<String> studentYears = studentRepository.findDistinctIntermediateYearsByCampusAndGroup(cleanCampus, cleanGroup);
-        if (studentYears != null) {
-            for (String y : studentYears) {
-                if (y != null && !y.isBlank()) {
-                    resultSet.add(y.trim());
-                }
-            }
-        }
-
-        List<String> sortedList = new ArrayList<>(resultSet);
-        sortedList.sort(AcademicGroupService::compareAcademicYears);
-        return sortedList;
-    }
-
-    public static int compareAcademicYears(String y1, String y2) {
-        if (y1 == null && y2 == null) return 0;
-        if (y1 == null) return 1;
-        if (y2 == null) return -1;
-        int rank1 = extractYearRank(y1);
-        int rank2 = extractYearRank(y2);
-        if (rank1 != rank2) {
-            return Integer.compare(rank1, rank2);
-        }
-        return y1.compareToIgnoreCase(y2);
-    }
-
-    private static int extractYearRank(String year) {
-        String lower = year.toLowerCase().trim();
-        if (lower.startsWith("1") || lower.contains("first")) return 1;
-        if (lower.startsWith("2") || lower.contains("second")) return 2;
-        if (lower.startsWith("3") || lower.contains("third")) return 3;
-        if (lower.startsWith("4") || lower.contains("fourth")) return 4;
-        return 99;
     }
 
     @Transactional

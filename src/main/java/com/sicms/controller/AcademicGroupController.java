@@ -26,17 +26,8 @@ public class AcademicGroupController {
 
     @GetMapping("/groups")
     @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
-    public ResponseEntity<List<AcademicGroup>> getAllGroups(
-            @RequestParam(value = "campus", required = false) String campus) {
-        return ResponseEntity.ok(groupService.getGroups(campus));
-    }
-
-    @GetMapping({"/years", "/academic-years"})
-    @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
-    public ResponseEntity<List<String>> getAcademicYears(
-            @RequestParam(value = "campus", required = false) String campus,
-            @RequestParam("group") String group) {
-        return ResponseEntity.ok(groupService.getDistinctAcademicYears(campus, group));
+    public ResponseEntity<List<AcademicGroup>> getAllGroups() {
+        return ResponseEntity.ok(groupService.getAllGroups());
     }
 
     @PostMapping("/groups")
