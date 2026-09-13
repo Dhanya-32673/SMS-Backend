@@ -170,7 +170,7 @@ public class StudentImportService {
             }
         }
 
-        StudentImportPreviewResponse response = validateImportInternal(file, campus, branchGroup, academicYear, targetSection, null, "ROLE_ADMIN");
+        StudentImportPreviewResponse response = validateImportInternal(file, campus, branchGroup, academicYear, intermediateYear, targetSection, null, "ROLE_ADMIN");
         return response;
     }
 
@@ -207,7 +207,7 @@ public class StudentImportService {
 
         AcademicSection targetSection = resolveSection(targetAssignment.getBranchGroup(), targetAssignment.getIntermediateYear(), targetAssignment.getSection());
 
-        StudentImportPreviewResponse response = validateImportInternal(file, null, targetAssignment.getBranchGroup(), targetAssignment.getAcademicYear(), targetSection, targetAssignment, "ROLE_FACULTY");
+        StudentImportPreviewResponse response = validateImportInternal(file, null, targetAssignment.getBranchGroup(), targetAssignment.getAcademicYear(), targetAssignment.getIntermediateYear(), targetSection, targetAssignment, "ROLE_FACULTY");
         response.setTargetGroup(targetAssignment.getBranchGroup());
         response.setTargetYear(targetAssignment.getIntermediateYear());
         response.setTargetSection(targetAssignment.getSection());
@@ -220,6 +220,7 @@ public class StudentImportService {
             String targetCampus,
             String targetGroup,
             String targetAcademicYear,
+            String targetIntermediateYear,
             AcademicSection targetSection,
             FacultyAssignment targetAssignment,
             String role
@@ -288,6 +289,9 @@ public class StudentImportService {
             if (targetAcademicYear != null && !targetAcademicYear.isBlank()) {
                 row.setAcademicYear(targetAcademicYear.trim());
             }
+            if (targetIntermediateYear != null && !targetIntermediateYear.isBlank()) {
+                row.setIntermediateYear(targetIntermediateYear.trim());
+            }
 
             if (targetSection != null) {
                 row.setBranchGroup(targetSection.getBranchGroup());
@@ -325,8 +329,8 @@ public class StudentImportService {
         response.setTargetCampus(targetCampus);
         response.setTargetGroup(targetGroup != null ? targetGroup : (targetSection != null ? targetSection.getBranchGroup() : null));
         response.setTargetAcademicYear(targetAcademicYear != null ? targetAcademicYear : (targetSection != null ? targetSection.getAcademicYear() : null));
+        response.setTargetYear(targetIntermediateYear != null ? targetIntermediateYear : (targetSection != null ? targetSection.getIntermediateYear() : (targetAssignment != null ? targetAssignment.getIntermediateYear() : null)));
         if (targetSection != null) {
-            response.setTargetYear(targetSection.getIntermediateYear());
             response.setTargetSection(targetSection.getName());
         }
 
@@ -384,7 +388,7 @@ public class StudentImportService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Section '" + section + "' is invalid or does not exist for the selected Group and Year.");
             }
         }
-        return confirmImportInternal(file, campus, branchGroup, academicYear, targetSection, null, skipDuplicates, updateExisting, adminEmail, "ROLE_ADMIN");
+        return confirmImportInternal(file, campus, branchGroup, academicYear, intermediateYear, targetSection, null, skipDuplicates, updateExisting, adminEmail, "ROLE_ADMIN");
     }
 
     /**
@@ -420,7 +424,7 @@ public class StudentImportService {
 
         AcademicSection targetSection = resolveSection(targetAssignment.getBranchGroup(), targetAssignment.getIntermediateYear(), targetAssignment.getSection());
 
-        return confirmImportInternal(file, null, targetAssignment.getBranchGroup(), targetAssignment.getAcademicYear(), targetSection, targetAssignment, skipDuplicates, updateExisting, facultyEmail, "ROLE_FACULTY");
+        return confirmImportInternal(file, null, targetAssignment.getBranchGroup(), targetAssignment.getAcademicYear(), targetAssignment.getIntermediateYear(), targetSection, targetAssignment, skipDuplicates, updateExisting, facultyEmail, "ROLE_FACULTY");
     }
 
     private StudentImportResultResponse confirmImportInternal(
@@ -428,6 +432,7 @@ public class StudentImportService {
             String targetCampus,
             String targetGroup,
             String targetAcademicYear,
+            String targetIntermediateYear,
             AcademicSection targetSection,
             FacultyAssignment targetAssignment,
             boolean skipDuplicates,
@@ -482,6 +487,9 @@ public class StudentImportService {
             }
             if (targetAcademicYear != null && !targetAcademicYear.isBlank()) {
                 row.setAcademicYear(targetAcademicYear.trim());
+            }
+            if (targetIntermediateYear != null && !targetIntermediateYear.isBlank()) {
+                row.setIntermediateYear(targetIntermediateYear.trim());
             }
 
             if (targetSection != null) {
@@ -547,7 +555,7 @@ public class StudentImportService {
         result.setCreatorRole(role);
 
         String grp = targetGroup != null ? targetGroup : (targetSection != null ? targetSection.getBranchGroup() : (targetAssignment != null ? targetAssignment.getBranchGroup() : null));
-        String yr = targetSection != null ? targetSection.getIntermediateYear() : (targetAssignment != null ? targetAssignment.getIntermediateYear() : null);
+        String yr = targetIntermediateYear != null ? targetIntermediateYear : (targetSection != null ? targetSection.getIntermediateYear() : (targetAssignment != null ? targetAssignment.getIntermediateYear() : null));
         String sec = targetSection != null ? targetSection.getName() : (targetAssignment != null ? targetAssignment.getSection() : null);
         String ay = targetAcademicYear != null ? targetAcademicYear : (targetSection != null ? targetSection.getAcademicYear() : (targetAssignment != null ? targetAssignment.getAcademicYear() : null));
 

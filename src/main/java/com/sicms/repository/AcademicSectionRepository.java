@@ -15,5 +15,11 @@ public interface AcademicSectionRepository extends JpaRepository<AcademicSection
 
     boolean existsByNameIgnoreCaseAndBranchGroupAndIntermediateYearAndAcademicYear(String name, String branchGroup, String intermediateYear, String academicYear);
 
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT TRIM(s.intermediateYear) FROM AcademicSection s WHERE " +
+           "s.active = true AND " +
+           "LOWER(TRIM(s.branchGroup)) = LOWER(TRIM(:group)) AND " +
+           "s.intermediateYear IS NOT NULL AND TRIM(s.intermediateYear) <> ''")
+    List<String> findDistinctIntermediateYearsByGroup(@org.springframework.data.repository.query.Param("group") String group);
+
     java.util.Optional<AcademicSection> findByNameIgnoreCase(String name);
 }
