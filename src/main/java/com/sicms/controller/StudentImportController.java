@@ -10,8 +10,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -50,16 +48,18 @@ public class StudentImportController {
 
     /**
      * Step 1: Upload Excel file for validation and preview.
-     * Validates destination section and student row integrity. Does not modify database records.
+     * Validates destination campus, group, year, and student row integrity. Does not modify database records.
      */
     @PostMapping(value = "/validate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<StudentImportPreviewResponse> validateImport(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "campus", required = false) String campus,
             @RequestParam(value = "branchGroup", required = false) String branchGroup,
+            @RequestParam(value = "academicYear", required = false) String academicYear,
             @RequestParam(value = "intermediateYear", required = false) String intermediateYear,
             @RequestParam(value = "section", required = false) String section
     ) {
-        StudentImportPreviewResponse preview = importService.validateAdminImport(file, branchGroup, intermediateYear, section);
+        StudentImportPreviewResponse preview = importService.validateAdminImport(file, campus, branchGroup, academicYear, intermediateYear, section);
         return ResponseEntity.ok(preview);
     }
 
@@ -69,7 +69,9 @@ public class StudentImportController {
     @PostMapping(value = "/confirm", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<StudentImportResultResponse> confirmImport(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "campus", required = false) String campus,
             @RequestParam(value = "branchGroup", required = false) String branchGroup,
+            @RequestParam(value = "academicYear", required = false) String academicYear,
             @RequestParam(value = "intermediateYear", required = false) String intermediateYear,
             @RequestParam(value = "section", required = false) String section,
             @RequestParam(value = "skipDuplicates", defaultValue = "true") boolean skipDuplicates,
@@ -77,7 +79,7 @@ public class StudentImportController {
             org.springframework.security.core.Authentication authentication
     ) {
         String adminEmail = authentication != null ? authentication.getName() : null;
-        StudentImportResultResponse result = importService.confirmAdminImport(file, branchGroup, intermediateYear, section, skipDuplicates, updateExisting, adminEmail);
+        StudentImportResultResponse result = importService.confirmAdminImport(file, campus, branchGroup, academicYear, intermediateYear, section, skipDuplicates, updateExisting, adminEmail);
         return ResponseEntity.ok(result);
     }
 

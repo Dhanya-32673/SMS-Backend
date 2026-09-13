@@ -24,6 +24,8 @@ public class AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
+    private final com.sicms.repository.RoleRepository roleRepository;
+    private final com.sicms.repository.StudentRepository studentRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
@@ -33,6 +35,8 @@ public class AuthService {
 
     public AuthService(
             UserRepository userRepository,
+            com.sicms.repository.RoleRepository roleRepository,
+            com.sicms.repository.StudentRepository studentRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             RefreshTokenService refreshTokenService,
@@ -41,6 +45,8 @@ public class AuthService {
             UserService userService
     ) {
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.studentRepository = studentRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
@@ -76,14 +82,104 @@ public class AuthService {
     }
 
     @Transactional
-    public LoginVerifyResponse facultyLogin(LoginRequest request) {
-        User user = validateEmailPasswordLogin(request);
-
-        String roleName = user.getRole() != null ? user.getRole().getRoleName() : "";
-        if (!"ROLE_FACULTY".equalsIgnoreCase(roleName) && !"FACULTY".equalsIgnoreCase(roleName)) {
-            throw new AccessDeniedException("Role mismatch: User is not a FACULTY");
+    public LoginVerifyResponse studentLogin(LoginRequest request) {
+        if (request == null || request.getEmail() == null || request.getPassword() == null) {
+            throw new InvalidCredentialsException("Email and password are required");
         }
 
+        String emailOrId = request.getEmail().trim().toLowerCase();
+
+        // 1. Check existing User record by email
+        java.util.Optional<User> userOpt = userRepository.findByEmailIgnoreCase(emailOrId);
+
+        // 2. If user not found directly in users table, lookup student in students table
+        if (userOpt.isEmpty()) {
+            java.util.Optional<com.sicms.entity.Student> studentOpt = studentRepository.findByEmailOrStudentId(emailOrId);
+            if (studentOpt.isPresent()) {
+                com.sicms.entity.Student student = studentOpt.get();
+                String targetEmail = (student.getEmailAddress1() != null && !student.getEmailAddress1().isBlank())
+                        ? student.getEmailAddress1().trim().toLowerCase()
+                        : (student.getStudentId() != null ? student.getStudentId().toLowerCase() + "@student.bhashyam.edu" : emailOrId);
+
+                com.sicms.entity.Role studentRole = roleRepository.findByRoleName("ROLE_STUDENT")
+                        .orElseGet(() -> roleRepository.findByRoleName("STUDENT")
+                        .orElseGet(() -> roleRepository.save(new com.sicms.entity.Role("ROLE_STUDENT", "Student User Role"))));
+
+                userOpt = userRepository.findByEmailIgnoreCase(targetEmail);
+                if (userOpt.isEmpty()) {
+                    String defaultPassword = StudentService.formatDobPassword(student.getDateOfBirth());
+                    if (defaultPassword == null || defaultPassword.isBlank()) {
+                        defaultPassword = "01-01-2000";
+                    }
+
+                    User newStudentUser = new User();
+                    newStudentUser.setFullName(student.getFullName());
+                    newStudentUser.setEmail(targetEmail);
+                    newStudentUser.setPasswordHash(passwordEncoder.encode(defaultPassword));
+                    newStudentUser.setRole(studentRole);
+                    newStudentUser.setAuthProvider(com.sicms.entity.AuthProvider.LOCAL);
+                    newStudentUser.setEmailVerified(true);
+                    newStudentUser.setAccountEnabled(true);
+                    newStudentUser.setMustChangePassword(true);
+                    newStudentUser.setStudent(student);
+
+                    userOpt = java.util.Optional.of(userRepository.save(newStudentUser));
+                }
+            }
+        }
+
+        User user = userOpt.orElseThrow(() -> new InvalidCredentialsException("Invalid credentials or student account not found"));
+
+        if (!Boolean.TRUE.equals(user.getAccountEnabled())) {
+            throw new AccountDisabledException("Account is disabled");
+        }
+
+        // Ensure student relationship is linked if available
+        com.sicms.entity.Student student = user.getStudent();
+        if (student == null) {
+            String targetId = user.getEmail() != null ? user.getEmail() : emailOrId;
+            student = studentRepository.findByEmailOrStudentId(targetId).orElse(null);
+            if (student == null && emailOrId != null) {
+                student = studentRepository.findByEmailOrStudentId(emailOrId).orElse(null);
+            }
+            if (student == null && targetId != null && targetId.contains("@")) {
+                String prefix = targetId.substring(0, targetId.indexOf("@")).trim();
+                student = studentRepository.findByStudentIdIgnoreCase(prefix).orElse(null);
+            }
+            if (student != null) {
+                user.setStudent(student);
+                userRepository.save(user);
+            }
+        }
+
+        // Validate strictly against the encoded password hash in the database
+        boolean matches = passwordEncoder.matches(request.getPassword(), user.getPasswordHash());
+
+        if (!matches) {
+            throw new InvalidCredentialsException("Invalid credentials");
+        }
+
+        String roleName = user.getRole() != null ? user.getRole().getRoleName() : "";
+        if (!"ROLE_STUDENT".equalsIgnoreCase(roleName) && !"STUDENT".equalsIgnoreCase(roleName)) {
+            // If user exists with another role (e.g. legacy role), ensure role is ROLE_STUDENT if student profile exists
+            boolean isStudentProfile = studentRepository.findByEmailOrStudentId(user.getEmail()).isPresent();
+            if (isStudentProfile) {
+                com.sicms.entity.Role studentRole = roleRepository.findByRoleName("ROLE_STUDENT")
+                        .orElseGet(() -> roleRepository.findByRoleName("STUDENT")
+                        .orElseGet(() -> roleRepository.save(new com.sicms.entity.Role("ROLE_STUDENT", "Student User Role"))));
+                user.setRole(studentRole);
+                userRepository.save(user);
+            } else {
+                throw new AccessDeniedException("Role mismatch: User is not a STUDENT");
+            }
+        }
+
+        return issueTokensForUser(user);
+    }
+
+    @Transactional
+    public LoginVerifyResponse facultyLogin(LoginRequest request) {
+        User user = validateEmailPasswordLogin(request);
         return issueTokensForUser(user);
     }
 
@@ -205,7 +301,17 @@ public class AuthService {
             throw new AuthException("Current password is incorrect.");
         }
 
+        if (user.getStudent() != null && user.getStudent().getDateOfBirth() != null) {
+            String dobPass = StudentService.formatDobPassword(user.getStudent().getDateOfBirth());
+            if (request.getNewPassword().trim().equals(dobPass)) {
+                throw new AuthException("Please choose a new password instead of your initial password.");
+            }
+        }
+
         userService.updatePassword(user, request.getNewPassword());
+        user.setMustChangePassword(false);
+        userRepository.save(user);
+
         refreshTokenRepository.revokeAllUserTokens(user);
         log.info("Password successfully updated and tokens revoked for user={}", userEmail);
     }

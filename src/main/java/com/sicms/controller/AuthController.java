@@ -22,11 +22,13 @@ public class AuthController {
     private final AuthService authService;
     private final UserRepository userRepository;
     private final GoogleAuthService googleAuthService;
+    private final com.sicms.repository.StudentRepository studentRepository;
 
-    public AuthController(AuthService authService, UserRepository userRepository, GoogleAuthService googleAuthService) {
+    public AuthController(AuthService authService, UserRepository userRepository, GoogleAuthService googleAuthService, com.sicms.repository.StudentRepository studentRepository) {
         this.authService = authService;
         this.userRepository = userRepository;
         this.googleAuthService = googleAuthService;
+        this.studentRepository = studentRepository;
     }
 
     @PostMapping({"/admin/login", "/login"})
@@ -47,7 +49,13 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "OTP sent successfully"));
     }
 
-    @PostMapping("/faculty/login")
+    @PostMapping({"/student/login", "/student-login"})
+    public ResponseEntity<LoginVerifyResponse> studentLogin(@Valid @RequestBody LoginRequest request) {
+        LoginVerifyResponse response = authService.studentLogin(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping({"/faculty/login", "/faculty-login"})
     public ResponseEntity<LoginVerifyResponse> facultyLogin(@Valid @RequestBody LoginRequest request) {
         LoginVerifyResponse response = authService.facultyLogin(request);
         return ResponseEntity.ok(response);
@@ -84,25 +92,55 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "Logout successful"));
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     @GetMapping("/me")
-    public ResponseEntity<UserDto> getCurrentUser(@AuthenticationPrincipal CustomUserDetails userDetails) {
-        if (userDetails == null) {
+    public ResponseEntity<UserDto> getCurrentUser(@AuthenticationPrincipal Object principal, Principal fallbackPrincipal) {
+        String email = null;
+        if (principal instanceof CustomUserDetails cud) {
+            email = cud.getEmail();
+        } else if (principal instanceof org.springframework.security.core.userdetails.UserDetails ud) {
+            email = ud.getUsername();
+        } else if (principal instanceof String str) {
+            email = str;
+        } else if (fallbackPrincipal != null) {
+            email = fallbackPrincipal.getName();
+        }
+
+        if (email == null || email.isBlank() || "anonymousUser".equalsIgnoreCase(email)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        User user = userRepository.findByEmailIgnoreCase(userDetails.getEmail())
-                .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+        User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
 
-        return ResponseEntity.ok(new UserDto(user));
+        UserDto dto = new UserDto(user);
+        if ((dto.getStudentId() == null || dto.getStudentId().isBlank()) && studentRepository != null) {
+            studentRepository.findByEmailOrStudentId(email).ifPresent(s -> {
+                dto.setStudentId(s.getStudentId());
+            });
+        }
+        return ResponseEntity.ok(dto);
     }
 
-    @RequestMapping(value = "/change-password", method = {RequestMethod.POST, RequestMethod.PUT})
+    @RequestMapping(value = {"/change-password", "/student/change-password"}, method = {RequestMethod.POST, RequestMethod.PUT})
     public ResponseEntity<Map<String, String>> changePassword(
             @Valid @RequestBody ChangePasswordRequest request,
-            @AuthenticationPrincipal CustomUserDetails userDetails,
-            Principal principal) {
-        String email = userDetails != null ? userDetails.getEmail() : (principal != null ? principal.getName() : null);
-        if (email == null) {
+            @AuthenticationPrincipal Object principal,
+            Principal fallbackPrincipal) {
+        String email = null;
+        if (principal instanceof CustomUserDetails cud) {
+            email = cud.getEmail();
+        } else if (principal instanceof org.springframework.security.core.userdetails.UserDetails ud) {
+            email = ud.getUsername();
+        } else if (principal instanceof String str) {
+            email = str;
+        } else if (fallbackPrincipal != null) {
+            email = fallbackPrincipal.getName();
+        }
+
+        if (email == null || email.isBlank() || "anonymousUser".equalsIgnoreCase(email)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         authService.changePassword(email, request);

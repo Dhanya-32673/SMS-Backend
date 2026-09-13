@@ -49,18 +49,25 @@ public class StudentImportControllerTest {
 
         @Override
         public StudentImportPreviewResponse validateImport(MultipartFile file) {
-            return validateAdminImport(file, null, null, null);
+            return validateAdminImport(file, null, null, null, null, null);
         }
 
         @Override
         public StudentImportPreviewResponse validateAdminImport(MultipartFile file, String branchGroup, String intermediateYear, String section) {
+            return validateAdminImport(file, null, branchGroup, null, intermediateYear, section);
+        }
+
+        @Override
+        public StudentImportPreviewResponse validateAdminImport(MultipartFile file, String campus, String branchGroup, String academicYear, String intermediateYear, String section) {
             validateCalled.set(true);
             StudentImportPreviewResponse preview = new StudentImportPreviewResponse();
             preview.setFileName(file.getOriginalFilename());
             preview.setTotalRows(1);
             preview.setValidRows(1);
             preview.setCanProceed(true);
+            preview.setTargetCampus(campus);
             preview.setTargetGroup(branchGroup);
+            preview.setTargetAcademicYear(academicYear);
             preview.setTargetYear(intermediateYear);
             preview.setTargetSection(section);
             return preview;
@@ -68,17 +75,24 @@ public class StudentImportControllerTest {
 
         @Override
         public StudentImportResultResponse confirmImport(MultipartFile file, boolean skipDuplicates, boolean updateExisting, String currentUserEmail) {
-            return confirmAdminImport(file, null, null, null, skipDuplicates, updateExisting, currentUserEmail);
+            return confirmAdminImport(file, null, null, null, null, null, skipDuplicates, updateExisting, currentUserEmail);
         }
 
         @Override
         public StudentImportResultResponse confirmAdminImport(MultipartFile file, String branchGroup, String intermediateYear, String section, boolean skipDuplicates, boolean updateExisting, String adminEmail) {
+            return confirmAdminImport(file, null, branchGroup, null, intermediateYear, section, skipDuplicates, updateExisting, adminEmail);
+        }
+
+        @Override
+        public StudentImportResultResponse confirmAdminImport(MultipartFile file, String campus, String branchGroup, String academicYear, String intermediateYear, String section, boolean skipDuplicates, boolean updateExisting, String adminEmail) {
             confirmCalled.set(true);
             StudentImportResultResponse res = new StudentImportResultResponse();
             res.setTotalRows(5);
             res.setImportedCount(5);
             res.setMessage("Import completed: 5 created.");
+            res.setTargetCampus(campus);
             res.setTargetGroup(branchGroup);
+            res.setTargetAcademicYear(academicYear);
             res.setTargetYear(intermediateYear);
             res.setTargetSection(section);
             return res;

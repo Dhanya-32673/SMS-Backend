@@ -15,6 +15,7 @@ public class StudentImportPreviewResponse {
     private List<StudentImportRowDto> preview = new ArrayList<>();
     private List<String> headerErrors = new ArrayList<>();
 
+    private String targetCampus;
     private String targetGroup;
     private String targetYear;
     private String targetSection;
@@ -51,6 +52,9 @@ public class StudentImportPreviewResponse {
 
     public List<String> getHeaderErrors() { return headerErrors; }
     public void setHeaderErrors(List<String> headerErrors) { this.headerErrors = headerErrors; }
+
+    public String getTargetCampus() { return targetCampus; }
+    public void setTargetCampus(String targetCampus) { this.targetCampus = targetCampus; }
 
     public String getTargetGroup() { return targetGroup; }
     public void setTargetGroup(String targetGroup) { this.targetGroup = targetGroup; }

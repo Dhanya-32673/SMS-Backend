@@ -40,7 +40,7 @@ public class FacultyStudentImportControllerTest {
         AtomicBoolean errorReportCalled = new AtomicBoolean(false);
 
         public TestableFacultyStudentImportService() {
-            super(null, null, null, null, null, null, null, null);
+            super(null, null, null, null, null, null, null, null, null);
         }
 
         @Override

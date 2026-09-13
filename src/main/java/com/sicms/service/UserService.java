@@ -24,6 +24,7 @@ public class UserService {
     @Transactional
     public void updatePassword(User user, String newRawPassword) {
         user.setPasswordHash(passwordEncoder.encode(newRawPassword));
+        user.setMustChangePassword(false);
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
     }

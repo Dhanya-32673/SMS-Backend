@@ -26,7 +26,6 @@ import com.sicms.entity.Faculty;
 import com.sicms.entity.FacultyAssignment;
 import com.sicms.entity.Role;
 import com.sicms.entity.Student;
-import com.sicms.entity.StudentAcademicDetail;
 import com.sicms.entity.User;
 import com.sicms.repository.FacultyAssignmentRepository;
 import com.sicms.repository.FacultyRepository;
@@ -129,17 +128,12 @@ public class FacultyService {
         }
 
         // 2. Check if student belongs to faculty's assigned sections
-        if (student.getAcademicDetail() == null) {
-            return false;
-        }
-
-        StudentAcademicDetail academicDetail = student.getAcademicDetail();
         return hasAccessToAcademicScope(
                 faculty,
-                academicDetail.getBranchGroup(),
-                academicDetail.getIntermediateYear(),
-                academicDetail.getSection(),
-                academicDetail.getAcademicYear()
+                student.getBranchGroup(),
+                student.getIntermediateYear(),
+                student.getSection(),
+                student.getAcademicYear()
         );
     }
 

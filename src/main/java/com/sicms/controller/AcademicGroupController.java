@@ -76,7 +76,7 @@ public class AcademicGroupController {
         return ResponseEntity.ok(groupService.getSectionMembers(id));
     }
 
-    @PostMapping("/sections/{id}/assign")
+    @PostMapping({"/sections/{id}/assign", "/sections/{id}/members"})
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> assignStudentsToSection(
             @PathVariable Long id,

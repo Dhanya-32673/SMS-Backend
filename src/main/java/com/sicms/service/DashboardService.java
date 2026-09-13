@@ -170,7 +170,7 @@ public class DashboardService {
 
         Map<String, Long> filteredYearCounts = new LinkedHashMap<>();
         for (Student student : accessibleStudents) {
-            String year = student.getAcademicDetail() != null ? student.getAcademicDetail().getIntermediateYear() : null;
+            String year = student.getIntermediateYear();
             if (year != null) {
                 filteredYearCounts.put(year, filteredYearCounts.getOrDefault(year, 0L) + 1);
             }

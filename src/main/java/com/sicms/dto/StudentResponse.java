@@ -2,95 +2,89 @@ package com.sicms.dto;
 
 import com.sicms.entity.Student;
 import com.sicms.entity.StudentStatus;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public class StudentResponse {
 
-    // Personal Info
+    // Technical Fields
     private Long id;
-    private String studentId;
-    private String rollNumber;
-    private String admissionNumber;
-    private String firstName;
-    private String middleName;
-    private String lastName;
-    private String fullName;
-    private String gender;
-    private LocalDate dateOfBirth;
-    private String bloodGroup;
-    private String nationality;
-    private String religion;
-    private String casteCategory;
-    private String aadhaarNumber;
-    private String panNumber;
-    private String maskedAadhaar;
-    private String maskedPan;
-    private String motherTongue;
-    private String maritalStatus;
-    private String identificationMarks;
-    private String profilePhotoUrl;
     private StudentStatus status;
+    private String section;
     private String createdByEmail;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    // Contact Details
+    // 1. Student ID
+    private String studentId;
+
+    // 2. Admission Number
+    private String admissionNumber;
+
+    // 3. Full Name
+    private String fullName;
+
+    // 4. Gender
+    private String gender;
+
+    // 5. Date of Birth
+    private LocalDate dateOfBirth;
+
+    // 6. Nationality
+    private String nationality;
+
+    // 7. Religion
+    private String religion;
+
+    // 8. Category
+    private String category;
+
+    // 9. Aadhaar Number & Masked Aadhaar
+    private String aadhaarNumber;
+    private String maskedAadhaar;
+
+    // 10. Profile Photo URL
+    private String profilePhotoUrl;
+
+    // 11. Mobile Number
     private String mobileNumber;
+
+    // 12. Alternate Mobile
     private String alternateMobile;
-    private String email;
-    private String parentEmail;
-    private String address;
-    private String village;
-    private String city;
-    private String district;
-    private String state;
-    private String pinCode;
-    private String country;
 
-    // Parent Details
+    // 13. Email Address - 1
+    private String emailAddress1;
+
+    // 14. Email Address - 2
+    private String emailAddress2;
+
+    // 15. Father Name
     private String fatherName;
-    private String fatherOccupation;
-    private String fatherMobile;
-    private String fatherEmail;
+
+    // 16. Mother Name
     private String motherName;
-    private String motherOccupation;
-    private String motherMobile;
-    private String motherEmail;
-    private String parentMobile;
-    private String occupation;
-    private BigDecimal annualIncome;
-    private String emergencyContact;
 
-    // Guardian Details
-    private String guardianName;
-    private String relationship;
-    private String guardianMobile;
-    private String guardianEmail;
-    private String guardianAddress;
-
-    // Academic Details
-    private String universityId;
-    private String department;
-    private String branchGroup;
-    private String intermediateYear;
-    private Integer semester;
-    private String section;
-    private Integer sectionCapacity;
-    private String batch;
+    // 17. Academic Year
     private String academicYear;
-    private LocalDate admissionDate;
-    private LocalDate joiningDate;
-    private String regulation;
+
+    // 18. Branch / Group
+    private String branchGroup;
+
+    // 19. Intermediate Year
+    private String intermediateYear;
+
+    // 20. Batch
+    private String batch;
+
+    // 21. Admission Type
     private String admissionType;
+
+    // 22. Hostel / Day Scholar
     private String hostelDayScholar;
-    private String medium;
-    private String previousSchool;
-    private String previousBoard;
-    private String scholarshipDetails;
-    private String busRoute;
-    private String assignedFacultyName;
+
+    // 23. Campus
+    private String campus;
+    private Long campusId;
 
     public StudentResponse() {
     }
@@ -100,186 +94,294 @@ public class StudentResponse {
 
         this.id = student.getId();
         this.studentId = student.getStudentId();
-        this.rollNumber = student.getRollNumber();
         this.admissionNumber = student.getAdmissionNumber();
-        this.firstName = student.getFirstName();
-        this.middleName = student.getMiddleName();
-        this.lastName = student.getLastName();
         this.fullName = student.getFullName();
         this.gender = student.getGender();
         this.dateOfBirth = student.getDateOfBirth();
-        this.bloodGroup = student.getBloodGroup();
         this.nationality = student.getNationality();
         this.religion = student.getReligion();
-        this.casteCategory = student.getCasteCategory();
+        this.category = student.getCategory();
         this.aadhaarNumber = student.getAadhaarNumber();
-        this.panNumber = student.getPanNumber();
         this.maskedAadhaar = maskAadhaar(student.getAadhaarNumber());
-        this.maskedPan = maskPan(student.getPanNumber());
-        this.identificationMarks = student.getIdentificationMarks();
         this.profilePhotoUrl = student.getProfilePhotoUrl();
+        this.mobileNumber = student.getMobileNumber();
+        this.alternateMobile = student.getAlternateMobile();
+        this.emailAddress1 = student.getEmailAddress1();
+        this.emailAddress2 = student.getEmailAddress2();
+        this.fatherName = student.getFatherName();
+        this.motherName = student.getMotherName();
+        this.academicYear = student.getAcademicYear();
+        this.branchGroup = student.getBranchGroup();
+        this.intermediateYear = student.getIntermediateYear();
+        this.batch = student.getBatch();
+        this.admissionType = student.getAdmissionType();
+        this.hostelDayScholar = student.getHostelDayScholar();
+        this.campus = student.getCampus();
+        this.campusId = student.getCampusId();
+
+        this.section = student.getSection() != null ? student.getSection() : "Unassigned";
         this.status = student.getStatus();
         this.createdByEmail = student.getCreatedBy() != null ? student.getCreatedBy().getEmail() : null;
         this.createdAt = student.getCreatedAt();
         this.updatedAt = student.getUpdatedAt();
-
-        if (student.getContactDetail() != null) {
-            this.mobileNumber = student.getContactDetail().getMobileNumber();
-            this.alternateMobile = student.getContactDetail().getAlternateMobile();
-            this.email = student.getContactDetail().getEmail();
-            this.address = student.getContactDetail().getAddress();
-            this.city = student.getContactDetail().getCity();
-            this.district = student.getContactDetail().getDistrict();
-            this.state = student.getContactDetail().getState();
-            this.pinCode = student.getContactDetail().getPinCode();
-            this.country = student.getContactDetail().getCountry();
-        }
-
-        if (student.getParentDetail() != null) {
-            this.fatherName = student.getParentDetail().getFatherName();
-            this.motherName = student.getParentDetail().getMotherName();
-            this.parentMobile = student.getParentDetail().getParentMobile();
-            this.parentEmail = student.getParentDetail().getParentEmail();
-            this.occupation = student.getParentDetail().getOccupation();
-            this.fatherOccupation = student.getParentDetail().getOccupation();
-            this.fatherMobile = student.getParentDetail().getParentMobile();
-            this.fatherEmail = student.getParentDetail().getParentEmail();
-            this.annualIncome = student.getParentDetail().getAnnualIncome();
-            this.emergencyContact = student.getParentDetail().getParentMobile();
-        }
-
-        if (student.getGuardianDetail() != null) {
-            this.guardianName = student.getGuardianDetail().getGuardianName();
-            this.relationship = student.getGuardianDetail().getRelationship();
-            this.guardianMobile = student.getGuardianDetail().getGuardianMobile();
-            this.guardianEmail = student.getGuardianDetail().getGuardianEmail();
-            this.guardianAddress = student.getGuardianDetail().getGuardianAddress();
-            if (student.getGuardianDetail().getFatherName() != null && this.fatherName == null) {
-                this.fatherName = student.getGuardianDetail().getFatherName();
-            }
-            if (student.getGuardianDetail().getMotherName() != null && this.motherName == null) {
-                this.motherName = student.getGuardianDetail().getMotherName();
-            }
-        }
-
-        if (student.getAcademicDetail() != null) {
-            this.universityId = student.getAcademicDetail().getUniversityId();
-            this.department = student.getAcademicDetail().getDepartment();
-            this.branchGroup = com.sicms.util.StudentFormatterUtil.formatBranchGroup(student.getAcademicDetail().getBranchGroup());
-            this.intermediateYear = com.sicms.util.StudentFormatterUtil.formatIntermediateYear(student.getAcademicDetail().getIntermediateYear());
-            this.semester = student.getAcademicDetail().getSemester();
-            this.section = com.sicms.util.StudentFormatterUtil.formatSection(student.getAcademicDetail().getSection());
-            this.batch = student.getAcademicDetail().getBatch();
-            this.academicYear = student.getAcademicDetail().getAcademicYear();
-            this.admissionDate = student.getAcademicDetail().getAdmissionDate();
-            this.joiningDate = student.getAcademicDetail().getAdmissionDate();
-            this.regulation = student.getAcademicDetail().getRegulation();
-            this.admissionType = student.getAcademicDetail().getAdmissionType();
-            this.hostelDayScholar = student.getAcademicDetail().getHostelDayScholar();
-            this.medium = student.getAcademicDetail().getMedium();
-        } else {
-            this.department = "General";
-            this.branchGroup = "General";
-            this.intermediateYear = "1st Year";
-            this.section = "Unassigned";
-        }
     }
 
-    public static String maskAadhaar(String aadhaar) {
-        if (aadhaar == null || aadhaar.trim().isEmpty()) return null;
-        String clean = aadhaar.replaceAll("\\s+", "");
-        if (clean.length() >= 4) {
-            return "XXXX XXXX " + clean.substring(clean.length() - 4);
+    private String maskAadhaar(String aadhaar) {
+        if (aadhaar == null || aadhaar.length() < 4) return "Not Provided";
+        String clean = aadhaar.trim();
+        if (clean.length() == 12) {
+            return "XXXX-XXXX-" + clean.substring(8);
         }
-        return "XXXX XXXX " + clean;
-    }
-
-    public static String maskPan(String pan) {
-        if (pan == null || pan.trim().isEmpty()) return null;
-        String clean = pan.trim();
-        if (clean.length() >= 4) {
-            return "XXXXXX" + clean.substring(clean.length() - 4);
-        }
-        return "XXXXXX" + clean;
+        return "XXXX-" + clean.substring(Math.max(0, clean.length() - 4));
     }
 
     // Getters and Setters
-    public Long getId() { return id; }
-    public String getStudentId() { return studentId; }
-    public String getRollNumber() { return rollNumber; }
-    public String getAdmissionNumber() { return admissionNumber; }
-    public String getFirstName() { return firstName; }
-    public String getMiddleName() { return middleName; }
-    public String getLastName() { return lastName; }
-    public String getFullName() { return fullName; }
-    public String getGender() { return gender; }
-    public LocalDate getDateOfBirth() { return dateOfBirth; }
-    public String getBloodGroup() { return bloodGroup; }
-    public String getNationality() { return nationality; }
-    public String getReligion() { return religion; }
-    public String getCasteCategory() { return casteCategory; }
-    public String getAadhaarNumber() { return aadhaarNumber; }
-    public String getPanNumber() { return panNumber; }
-    public String getMaskedAadhaar() { return maskedAadhaar; }
-    public String getMaskedPan() { return maskedPan; }
-    public String getMotherTongue() { return motherTongue; }
-    public String getMaritalStatus() { return maritalStatus; }
-    public String getIdentificationMarks() { return identificationMarks; }
-    public String getProfilePhotoUrl() { return profilePhotoUrl; }
-    public StudentStatus getStatus() { return status; }
-    public String getCreatedByEmail() { return createdByEmail; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
 
-    public String getMobileNumber() { return mobileNumber; }
-    public String getAlternateMobile() { return alternateMobile; }
-    public String getEmail() { return email; }
-    public String getParentEmail() { return parentEmail; }
-    public String getAddress() { return address; }
-    public String getVillage() { return village; }
-    public String getCity() { return city; }
-    public String getDistrict() { return district; }
-    public String getState() { return state; }
-    public String getPinCode() { return pinCode; }
-    public String getCountry() { return country; }
+    public Long getId() {
+        return id;
+    }
 
-    public String getFatherName() { return fatherName; }
-    public String getFatherOccupation() { return fatherOccupation; }
-    public String getFatherMobile() { return fatherMobile; }
-    public String getFatherEmail() { return fatherEmail; }
-    public String getMotherName() { return motherName; }
-    public String getMotherOccupation() { return motherOccupation; }
-    public String getMotherMobile() { return motherMobile; }
-    public String getMotherEmail() { return motherEmail; }
-    public String getParentMobile() { return parentMobile; }
-    public String getOccupation() { return occupation; }
-    public BigDecimal getAnnualIncome() { return annualIncome; }
-    public String getEmergencyContact() { return emergencyContact; }
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-    public String getGuardianName() { return guardianName; }
-    public String getRelationship() { return relationship; }
-    public String getGuardianMobile() { return guardianMobile; }
-    public String getGuardianEmail() { return guardianEmail; }
-    public String getGuardianAddress() { return guardianAddress; }
+    public StudentStatus getStatus() {
+        return status;
+    }
 
-    public String getUniversityId() { return universityId; }
-    public String getDepartment() { return department; }
-    public String getBranchGroup() { return branchGroup; }
-    public String getIntermediateYear() { return intermediateYear; }
-    public Integer getSemester() { return semester; }
-    public String getSection() { return section; }
-    public Integer getSectionCapacity() { return sectionCapacity; }
-    public String getBatch() { return batch; }
-    public String getAcademicYear() { return academicYear; }
-    public LocalDate getAdmissionDate() { return admissionDate; }
-    public LocalDate getJoiningDate() { return joiningDate; }
-    public String getRegulation() { return regulation; }
-    public String getAdmissionType() { return admissionType; }
-    public String getHostelDayScholar() { return hostelDayScholar; }
-    public String getMedium() { return medium; }
-    public String getPreviousSchool() { return previousSchool; }
-    public String getPreviousBoard() { return previousBoard; }
-    public String getScholarshipDetails() { return scholarshipDetails; }
-    public String getBusRoute() { return busRoute; }
-    public String getAssignedFacultyName() { return assignedFacultyName; }
+    public void setStatus(StudentStatus status) {
+        this.status = status;
+    }
+
+    public String getSection() {
+        return section;
+    }
+
+    public void setSection(String section) {
+        this.section = section;
+    }
+
+    public String getCreatedByEmail() {
+        return createdByEmail;
+    }
+
+    public void setCreatedByEmail(String createdByEmail) {
+        this.createdByEmail = createdByEmail;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public String getStudentId() {
+        return studentId;
+    }
+
+    public void setStudentId(String studentId) {
+        this.studentId = studentId;
+    }
+
+    public String getAdmissionNumber() {
+        return admissionNumber;
+    }
+
+    public void setAdmissionNumber(String admissionNumber) {
+        this.admissionNumber = admissionNumber;
+    }
+
+    public String getFullName() {
+        return fullName;
+    }
+
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
+    }
+
+    public String getGender() {
+        return gender;
+    }
+
+    public void setGender(String gender) {
+        this.gender = gender;
+    }
+
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+
+    public String getNationality() {
+        return nationality;
+    }
+
+    public void setNationality(String nationality) {
+        this.nationality = nationality;
+    }
+
+    public String getReligion() {
+        return religion;
+    }
+
+    public void setReligion(String religion) {
+        this.religion = religion;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public String getAadhaarNumber() {
+        return aadhaarNumber;
+    }
+
+    public void setAadhaarNumber(String aadhaarNumber) {
+        this.aadhaarNumber = aadhaarNumber;
+    }
+
+    public String getMaskedAadhaar() {
+        return maskedAadhaar;
+    }
+
+    public void setMaskedAadhaar(String maskedAadhaar) {
+        this.maskedAadhaar = maskedAadhaar;
+    }
+
+    public String getProfilePhotoUrl() {
+        return profilePhotoUrl;
+    }
+
+    public void setProfilePhotoUrl(String profilePhotoUrl) {
+        this.profilePhotoUrl = profilePhotoUrl;
+    }
+
+    public String getMobileNumber() {
+        return mobileNumber;
+    }
+
+    public void setMobileNumber(String mobileNumber) {
+        this.mobileNumber = mobileNumber;
+    }
+
+    public String getAlternateMobile() {
+        return alternateMobile;
+    }
+
+    public void setAlternateMobile(String alternateMobile) {
+        this.alternateMobile = alternateMobile;
+    }
+
+    public String getEmailAddress1() {
+        return emailAddress1;
+    }
+
+    public void setEmailAddress1(String emailAddress1) {
+        this.emailAddress1 = emailAddress1;
+    }
+
+    public String getEmailAddress2() {
+        return emailAddress2;
+    }
+
+    public void setEmailAddress2(String emailAddress2) {
+        this.emailAddress2 = emailAddress2;
+    }
+
+    public String getFatherName() {
+        return fatherName;
+    }
+
+    public void setFatherName(String fatherName) {
+        this.fatherName = fatherName;
+    }
+
+    public String getMotherName() {
+        return motherName;
+    }
+
+    public void setMotherName(String motherName) {
+        this.motherName = motherName;
+    }
+
+    public String getAcademicYear() {
+        return academicYear;
+    }
+
+    public void setAcademicYear(String academicYear) {
+        this.academicYear = academicYear;
+    }
+
+    public String getBranchGroup() {
+        return branchGroup;
+    }
+
+    public void setBranchGroup(String branchGroup) {
+        this.branchGroup = branchGroup;
+    }
+
+    public String getIntermediateYear() {
+        return intermediateYear;
+    }
+
+    public void setIntermediateYear(String intermediateYear) {
+        this.intermediateYear = intermediateYear;
+    }
+
+    public String getBatch() {
+        return batch;
+    }
+
+    public void setBatch(String batch) {
+        this.batch = batch;
+    }
+
+    public String getAdmissionType() {
+        return admissionType;
+    }
+
+    public void setAdmissionType(String admissionType) {
+        this.admissionType = admissionType;
+    }
+
+    public String getHostelDayScholar() {
+        return hostelDayScholar;
+    }
+
+    public void setHostelDayScholar(String hostelDayScholar) {
+        this.hostelDayScholar = hostelDayScholar;
+    }
+
+    public String getCampus() {
+        return campus;
+    }
+
+    public void setCampus(String campus) {
+        this.campus = campus;
+    }
+
+    public Long getCampusId() {
+        return campusId;
+    }
+
+    public void setCampusId(Long campusId) {
+        this.campusId = campusId;
+    }
 }

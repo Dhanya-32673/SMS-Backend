@@ -11,6 +11,7 @@ public class DocumentSummaryResponse {
     private String studentId;
     private String studentName;
     private String rollNumber;
+    private String admissionNumber;
     private String documentTypeName;
     private DocumentCategory category;
     private String originalFileName;
@@ -48,11 +49,21 @@ public class DocumentSummaryResponse {
     }
 
     public String getRollNumber() {
-        return rollNumber;
+        return rollNumber != null ? rollNumber : admissionNumber;
     }
 
     public void setRollNumber(String rollNumber) {
         this.rollNumber = rollNumber;
+        if (this.admissionNumber == null) this.admissionNumber = rollNumber;
+    }
+
+    public String getAdmissionNumber() {
+        return admissionNumber != null ? admissionNumber : rollNumber;
+    }
+
+    public void setAdmissionNumber(String admissionNumber) {
+        this.admissionNumber = admissionNumber;
+        if (this.rollNumber == null) this.rollNumber = admissionNumber;
     }
 
     public String getDocumentTypeName() {

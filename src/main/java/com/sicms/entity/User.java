@@ -40,6 +40,13 @@ public class User {
     @Column(name = "account_enabled", nullable = false)
     private Boolean accountEnabled = true;
 
+    @Column(name = "must_change_password", nullable = false, columnDefinition = "boolean default false")
+    private Boolean mustChangePassword = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_id")
+    private Student student;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -148,6 +155,22 @@ public class User {
 
     public void setAccountEnabled(Boolean accountEnabled) {
         this.accountEnabled = accountEnabled;
+    }
+
+    public Boolean getMustChangePassword() {
+        return mustChangePassword != null ? mustChangePassword : false;
+    }
+
+    public void setMustChangePassword(Boolean mustChangePassword) {
+        this.mustChangePassword = mustChangePassword;
+    }
+
+    public Student getStudent() {
+        return student;
+    }
+
+    public void setStudent(Student student) {
+        this.student = student;
     }
 
     public LocalDateTime getCreatedAt() {

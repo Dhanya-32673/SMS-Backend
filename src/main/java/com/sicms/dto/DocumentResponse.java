@@ -12,6 +12,7 @@ public class DocumentResponse {
     private String studentId;
     private String studentName;
     private String rollNumber;
+    private String admissionNumber;
     private Long documentTypeId;
     private String documentTypeCode;
     private String documentTypeName;
@@ -65,11 +66,21 @@ public class DocumentResponse {
     }
 
     public String getRollNumber() {
-        return rollNumber;
+        return rollNumber != null ? rollNumber : admissionNumber;
     }
 
     public void setRollNumber(String rollNumber) {
         this.rollNumber = rollNumber;
+        if (this.admissionNumber == null) this.admissionNumber = rollNumber;
+    }
+
+    public String getAdmissionNumber() {
+        return admissionNumber != null ? admissionNumber : rollNumber;
+    }
+
+    public void setAdmissionNumber(String admissionNumber) {
+        this.admissionNumber = admissionNumber;
+        if (this.rollNumber == null) this.rollNumber = admissionNumber;
     }
 
     public Long getDocumentTypeId() {

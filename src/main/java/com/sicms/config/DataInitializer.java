@@ -14,12 +14,13 @@ public class DataInitializer implements CommandLineRunner {
     private final AcademicSectionRepository sectionRepository;
     private final DocumentTypeRepository documentTypeRepository;
     private final UserRepository userRepository;
-    private final FacultyRepository facultyRepository;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     private final javax.sql.DataSource dataSource;
 
     @org.springframework.beans.factory.annotation.Value("${app.admin.email:bhashyamgnt.edu@gmail.com}")
     private String adminEmail;
+
+    private final com.sicms.service.CampusService campusService;
 
     public DataInitializer(RoleRepository roleRepository,
                            PermissionRepository permissionRepository,
@@ -27,18 +28,18 @@ public class DataInitializer implements CommandLineRunner {
                            AcademicSectionRepository sectionRepository,
                            DocumentTypeRepository documentTypeRepository,
                            UserRepository userRepository,
-                           FacultyRepository facultyRepository,
                            org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
-                           javax.sql.DataSource dataSource) {
+                           javax.sql.DataSource dataSource,
+                           com.sicms.service.CampusService campusService) {
         this.roleRepository = roleRepository;
         this.permissionRepository = permissionRepository;
         this.groupRepository = groupRepository;
         this.sectionRepository = sectionRepository;
         this.documentTypeRepository = documentTypeRepository;
         this.userRepository = userRepository;
-        this.facultyRepository = facultyRepository;
         this.passwordEncoder = passwordEncoder;
         this.dataSource = dataSource;
+        this.campusService = campusService;
     }
 
     @Override
@@ -49,6 +50,9 @@ public class DataInitializer implements CommandLineRunner {
         } catch (Exception e) {
             System.err.println("SICMS PostgreSQL Connection Check Warning: " + e.getMessage());
         }
+
+        // === 0. Standardize Student Schema ===
+        migrateStudentSchema();
 
         // === 1. Roles ===
         try {
@@ -83,11 +87,11 @@ public class DataInitializer implements CommandLineRunner {
 
         // === 3. Academic Groups & Sections ===
         try {
-            seedGroup("MPC", "Maths, Physics, Chemistry", "Intermediate Science Stream");
-            seedGroup("BiPC", "Biology, Physics, Chemistry", "Intermediate Biology Stream");
-            seedGroup("MEC", "Maths, Economics, Commerce", "Intermediate Commerce/Maths Stream");
-            seedGroup("CEC", "Civics, Economics, Commerce", "Intermediate Commerce Stream");
-            seedGroup("HEC", "History, Economics, Civics", "Intermediate Arts Stream");
+            seedGroup("MPC", "MPC", "Mathematics, Physics, Chemistry");
+            seedGroup("BiPC", "BiPC", "Biology, Physics, Chemistry");
+            seedGroup("MEC", "MEC", "Mathematics, Economics, Commerce");
+            seedGroup("CEC", "CEC", "Civics, Economics, Commerce");
+            seedGroup("HEC", "HEC", "History, Economics, Civics");
 
             seedSection("A", "MPC", "1st Year", "2026-2027", 60);
             seedSection("B", "MPC", "1st Year", "2026-2027", 60);
@@ -99,6 +103,14 @@ public class DataInitializer implements CommandLineRunner {
             System.out.println("Academic master data initialized");
         } catch (Exception e) {
             System.err.println("Academic master data warning: " + e.getMessage());
+        }
+
+        // === 3.5. Official Campuses ===
+        try {
+            campusService.initOfficialCampuses();
+            System.out.println("Official 18 Campuses master data initialized");
+        } catch (Exception e) {
+            System.err.println("Campus master data warning: " + e.getMessage());
         }
 
         // === 4. Document Types ===
@@ -219,9 +231,16 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void seedGroup(String code, String name, String desc) {
-        if (groupRepository.findByCode(code).isEmpty()) {
+        java.util.Optional<AcademicGroup> opt = groupRepository.findByCode(code);
+        if (opt.isEmpty()) {
             AcademicGroup ag = new AcademicGroup();
             ag.setCode(code);
+            ag.setName(name);
+            ag.setDescription(desc);
+            ag.setActive(true);
+            groupRepository.save(ag);
+        } else {
+            AcademicGroup ag = opt.get();
             ag.setName(name);
             ag.setDescription(desc);
             ag.setActive(true);
@@ -253,6 +272,112 @@ public class DataInitializer implements CommandLineRunner {
             dt.setHasExpiry(expiry);
             dt.setActive(true);
             documentTypeRepository.save(dt);
+        }
+    }
+
+    private void migrateStudentSchema() {
+        try (java.sql.Connection conn = dataSource.getConnection(); java.sql.Statement stmt = conn.createStatement()) {
+            String[] alterCols = {
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false;",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS student_id BIGINT REFERENCES students(id);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS full_name VARCHAR(150);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS category VARCHAR(50);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS email_address_1 VARCHAR(150);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS email_address_2 VARCHAR(150);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS mobile_number VARCHAR(20);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS alternate_mobile VARCHAR(20);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS father_name VARCHAR(100);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS mother_name VARCHAR(100);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS academic_year VARCHAR(20);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS branch_group VARCHAR(50);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS intermediate_year VARCHAR(20);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS batch VARCHAR(20);",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS admission_type VARCHAR(30) DEFAULT 'REGULAR';",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS hostel_day_scholar VARCHAR(30) DEFAULT 'DAY_SCHOLAR';",
+                "ALTER TABLE students ADD COLUMN IF NOT EXISTS section VARCHAR(10) DEFAULT 'Unassigned';"
+            };
+            for (String sql : alterCols) {
+                try {
+                    stmt.execute(sql);
+                } catch (Exception e) {
+                    System.err.println("Notice: Schema column migration: " + e.getMessage());
+                }
+            }
+
+            // Copy data from child tables if they exist
+            String[] dataMigrations = {
+                "UPDATE students s SET full_name = TRIM(CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, ''))) WHERE (s.full_name IS NULL OR s.full_name = '') AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='students' AND column_name='first_name');",
+                "UPDATE students s SET email_address_1 = COALESCE(s.email_address_1, c.email), mobile_number = COALESCE(s.mobile_number, c.mobile_number), alternate_mobile = COALESCE(s.alternate_mobile, c.alternate_mobile) FROM student_contact_details c WHERE c.student_id = s.id;",
+                "UPDATE students s SET father_name = COALESCE(s.father_name, p.father_name), mother_name = COALESCE(s.mother_name, p.mother_name) FROM student_parent_details p WHERE p.student_id = s.id;",
+                "UPDATE students s SET academic_year = COALESCE(s.academic_year, a.academic_year), branch_group = COALESCE(s.branch_group, a.branch_group), intermediate_year = COALESCE(s.intermediate_year, a.intermediate_year), batch = COALESCE(s.batch, a.batch), admission_type = COALESCE(s.admission_type, a.admission_type, 'REGULAR'), hostel_day_scholar = COALESCE(s.hostel_day_scholar, a.hostel_day_scholar, 'DAY_SCHOLAR'), section = COALESCE(s.section, a.section, 'Unassigned') FROM student_academic_details a WHERE a.student_id = s.id;",
+                "UPDATE students SET category = COALESCE(category, caste_category) WHERE EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='students' AND column_name='caste_category');",
+                "UPDATE users u SET student_id = s.id FROM students s WHERE u.student_id IS NULL AND (LOWER(u.email) = LOWER(s.email_address_1) OR LOWER(u.email) = LOWER(s.email_address_2) OR LOWER(u.email) = LOWER(CONCAT(s.student_id, '@student.bhashyam.edu')) OR LOWER(u.email) = LOWER(s.student_id) OR LOWER(u.email) = LOWER(s.admission_number));"
+            };
+            for (String sql : dataMigrations) {
+                try {
+                    stmt.execute(sql);
+                } catch (Exception ignored) {}
+            }
+
+            // Purge mock seeds & test academic groups
+            try {
+                stmt.execute("DELETE FROM student_documents WHERE student_id IN (1, 2, 3, 4, 5, 6, 7, 8, 9);");
+                stmt.execute("DELETE FROM students WHERE id IN (1, 2, 3, 4, 5, 6, 7, 8, 9);");
+                stmt.execute("DELETE FROM academic_groups WHERE UPPER(code) NOT IN ('MPC', 'BIPC', 'MEC', 'CEC', 'HEC') OR LOWER(code) LIKE 'qa%' OR LOWER(name) LIKE '%quality assurance%' OR LOWER(description) LIKE '%automated api test%';");
+            } catch (Exception ignored) {}
+
+            // Drop child tables
+            String[] dropTables = {
+                "DROP TABLE IF EXISTS student_guardians CASCADE;",
+                "DROP TABLE IF EXISTS student_contact_details CASCADE;",
+                "DROP TABLE IF EXISTS student_parent_details CASCADE;",
+                "DROP TABLE IF EXISTS student_academic_details CASCADE;"
+            };
+            for (String sql : dropTables) {
+                try {
+                    stmt.execute(sql);
+                } catch (Exception ignored) {}
+            }
+
+            // Drop obsolete columns
+            String[] dropCols = {
+                "ALTER TABLE students DROP COLUMN IF EXISTS roll_number;",
+                "ALTER TABLE students DROP COLUMN IF EXISTS first_name;",
+                "ALTER TABLE students DROP COLUMN IF EXISTS middle_name;",
+                "ALTER TABLE students DROP COLUMN IF EXISTS last_name;",
+                "ALTER TABLE students DROP COLUMN IF EXISTS blood_group;",
+                "ALTER TABLE students DROP COLUMN IF EXISTS caste_category;",
+                "ALTER TABLE students DROP COLUMN IF EXISTS pan_number;",
+                "ALTER TABLE students DROP COLUMN IF EXISTS identification_marks;"
+            };
+            for (String sql : dropCols) {
+                try {
+                    stmt.execute(sql);
+                } catch (Exception ignored) {}
+            }
+
+            try {
+                stmt.execute("ALTER TABLE document_versions ALTER COLUMN file_name DROP NOT NULL;");
+            } catch (Exception ignored) {}
+
+            // Indexes
+            String[] indexes = {
+                "CREATE UNIQUE INDEX IF NOT EXISTS uk_students_admission_number ON students (admission_number) WHERE admission_number IS NOT NULL AND admission_number <> '';",
+                "CREATE INDEX IF NOT EXISTS idx_students_branch_group ON students(branch_group);",
+                "CREATE INDEX IF NOT EXISTS idx_students_academic_year ON students(academic_year);",
+                "CREATE INDEX IF NOT EXISTS idx_students_section ON students(section);",
+                "CREATE INDEX IF NOT EXISTS idx_students_mobile ON students(mobile_number);",
+                "CREATE INDEX IF NOT EXISTS idx_students_email_1 ON students(email_address_1);"
+            };
+            for (String sql : indexes) {
+                try {
+                    stmt.execute(sql);
+                } catch (Exception ignored) {}
+            }
+
+            System.out.println("Standardized student schema verified and migrated successfully");
+        } catch (Exception e) {
+            System.err.println("Student schema migration check warning: " + e.getMessage());
         }
     }
 }

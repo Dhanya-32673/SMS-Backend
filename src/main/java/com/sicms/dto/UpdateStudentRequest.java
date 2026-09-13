@@ -1,75 +1,93 @@
 package com.sicms.dto;
 
 import com.sicms.entity.StudentStatus;
-import java.math.BigDecimal;
+import jakarta.validation.constraints.*;
 import java.time.LocalDate;
 
 public class UpdateStudentRequest {
 
-    // Personal Details
-    private String rollNumber;
+    // 2. Admission Number
     private String admissionNumber;
-    private String firstName;
-    private String middleName;
-    private String lastName;
+
+    // 3. Full Name
+    @Size(max = 150, message = "Full Name cannot exceed 150 characters")
     private String fullName;
+
+    // 4. Gender
+    @Size(max = 20, message = "Gender cannot exceed 20 characters")
     private String gender;
+
+    // 5. Date of Birth
+    @Past(message = "Date of Birth must be in the past")
     private LocalDate dateOfBirth;
-    private String bloodGroup;
+
+    // 6. Nationality
     private String nationality;
+
+    // 7. Religion
     private String religion;
-    private String casteCategory;
+
+    // 8. Category
+    private String category;
+
+    // 9. Aadhaar Number
+    @Pattern(regexp = "^$|^[0-9]{12}$", message = "Aadhaar Number must contain exactly 12 digits")
     private String aadhaarNumber;
-    private String panNumber;
-    private String identificationMarks;
+
+    // 10. Profile Photo URL
     private String profilePhotoUrl;
-    private StudentStatus status;
 
-    // Contact Details
+    // 11. Mobile Number
+    @Pattern(regexp = "^$|^[0-9]{10,15}$", message = "Mobile Number must contain 10 to 15 digits")
     private String mobileNumber;
+
+    // 12. Alternate Mobile
+    @Pattern(regexp = "^$|^[0-9]{10,15}$", message = "Alternate Mobile must contain 10 to 15 digits")
     private String alternateMobile;
-    private String email;
-    private String address;
-    private String city;
-    private String district;
-    private String state;
-    private String pinCode;
-    private String country;
 
-    // Parent Details
+    // 13. Email Address - 1
+    @Email(message = "Valid Email Address - 1 is required")
+    private String emailAddress1;
+
+    // 14. Email Address - 2
+    @Email(message = "Valid Email Address - 2 is required")
+    private String emailAddress2;
+
+    // 15. Father Name
+    @Size(max = 100, message = "Father Name cannot exceed 100 characters")
     private String fatherName;
-    private String motherName;
-    private String parentMobile;
-    private String parentEmail;
-    private String occupation;
-    private BigDecimal annualIncome;
 
-    // Academic Details
-    private String universityId;
-    private String department;
-    private String branchGroup;
-    private String intermediateYear;
-    private Integer semester;
-    private String section;
-    private String batch;
+    // 16. Mother Name
+    @Size(max = 100, message = "Mother Name cannot exceed 100 characters")
+    private String motherName;
+
+    // 17. Academic Year
     private String academicYear;
-    private LocalDate admissionDate;
-    private String regulation;
+
+    // 18. Branch / Group
+    private String branchGroup;
+
+    // 19. Intermediate Year
+    private String intermediateYear;
+
+    // 20. Batch
+    private String batch;
+
+    // 21. Admission Type
     private String admissionType;
+
+    // 22. Hostel / Day Scholar
     private String hostelDayScholar;
-    private String medium;
+
+    // Technical Fields
+    private String campus;
+    private String section;
+    private StudentStatus status;
 
     public UpdateStudentRequest() {
     }
 
     // Getters and Setters
-    public String getRollNumber() {
-        return rollNumber;
-    }
-
-    public void setRollNumber(String rollNumber) {
-        this.rollNumber = rollNumber;
-    }
 
     public String getAdmissionNumber() {
         return admissionNumber;
@@ -79,37 +97,8 @@ public class UpdateStudentRequest {
         this.admissionNumber = admissionNumber;
     }
 
-    public String getFirstName() {
-        return firstName;
-    }
-
-    public void setFirstName(String firstName) {
-        this.firstName = firstName;
-    }
-
-    public String getMiddleName() {
-        return middleName;
-    }
-
-    public void setMiddleName(String middleName) {
-        this.middleName = middleName;
-    }
-
-    public String getLastName() {
-        return lastName;
-    }
-
-    public void setLastName(String lastName) {
-        this.lastName = lastName;
-    }
-
     public String getFullName() {
-        if (fullName != null && !fullName.trim().isEmpty()) return fullName;
-        StringBuilder sb = new StringBuilder();
-        if (firstName != null) sb.append(firstName.trim());
-        if (middleName != null && !middleName.trim().isEmpty()) sb.append(" ").append(middleName.trim());
-        if (lastName != null) sb.append(" ").append(lastName.trim());
-        return sb.toString();
+        return fullName;
     }
 
     public void setFullName(String fullName) {
@@ -132,14 +121,6 @@ public class UpdateStudentRequest {
         this.dateOfBirth = dateOfBirth;
     }
 
-    public String getBloodGroup() {
-        return bloodGroup;
-    }
-
-    public void setBloodGroup(String bloodGroup) {
-        this.bloodGroup = bloodGroup;
-    }
-
     public String getNationality() {
         return nationality;
     }
@@ -156,12 +137,12 @@ public class UpdateStudentRequest {
         this.religion = religion;
     }
 
-    public String getCasteCategory() {
-        return casteCategory;
+    public String getCategory() {
+        return category;
     }
 
-    public void setCasteCategory(String casteCategory) {
-        this.casteCategory = casteCategory;
+    public void setCategory(String category) {
+        this.category = category;
     }
 
     public String getAadhaarNumber() {
@@ -172,36 +153,12 @@ public class UpdateStudentRequest {
         this.aadhaarNumber = aadhaarNumber;
     }
 
-    public String getPanNumber() {
-        return panNumber;
-    }
-
-    public void setPanNumber(String panNumber) {
-        this.panNumber = panNumber;
-    }
-
-    public String getIdentificationMarks() {
-        return identificationMarks;
-    }
-
-    public void setIdentificationMarks(String identificationMarks) {
-        this.identificationMarks = identificationMarks;
-    }
-
     public String getProfilePhotoUrl() {
         return profilePhotoUrl;
     }
 
     public void setProfilePhotoUrl(String profilePhotoUrl) {
         this.profilePhotoUrl = profilePhotoUrl;
-    }
-
-    public StudentStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(StudentStatus status) {
-        this.status = status;
     }
 
     public String getMobileNumber() {
@@ -220,60 +177,20 @@ public class UpdateStudentRequest {
         this.alternateMobile = alternateMobile;
     }
 
-    public String getEmail() {
-        return email;
+    public String getEmailAddress1() {
+        return emailAddress1;
     }
 
-    public void setEmail(String email) {
-        this.email = email;
+    public void setEmailAddress1(String emailAddress1) {
+        this.emailAddress1 = emailAddress1;
     }
 
-    public String getAddress() {
-        return address;
+    public String getEmailAddress2() {
+        return emailAddress2;
     }
 
-    public void setAddress(String address) {
-        this.address = address;
-    }
-
-    public String getCity() {
-        return city;
-    }
-
-    public void setCity(String city) {
-        this.city = city;
-    }
-
-    public String getDistrict() {
-        return district;
-    }
-
-    public void setDistrict(String district) {
-        this.district = district;
-    }
-
-    public String getState() {
-        return state;
-    }
-
-    public void setState(String state) {
-        this.state = state;
-    }
-
-    public String getPinCode() {
-        return pinCode;
-    }
-
-    public void setPinCode(String pinCode) {
-        this.pinCode = pinCode;
-    }
-
-    public String getCountry() {
-        return country;
-    }
-
-    public void setCountry(String country) {
-        this.country = country;
+    public void setEmailAddress2(String emailAddress2) {
+        this.emailAddress2 = emailAddress2;
     }
 
     public String getFatherName() {
@@ -292,52 +209,12 @@ public class UpdateStudentRequest {
         this.motherName = motherName;
     }
 
-    public String getParentMobile() {
-        return parentMobile;
+    public String getAcademicYear() {
+        return academicYear;
     }
 
-    public void setParentMobile(String parentMobile) {
-        this.parentMobile = parentMobile;
-    }
-
-    public String getParentEmail() {
-        return parentEmail;
-    }
-
-    public void setParentEmail(String parentEmail) {
-        this.parentEmail = parentEmail;
-    }
-
-    public String getOccupation() {
-        return occupation;
-    }
-
-    public void setOccupation(String occupation) {
-        this.occupation = occupation;
-    }
-
-    public BigDecimal getAnnualIncome() {
-        return annualIncome;
-    }
-
-    public void setAnnualIncome(BigDecimal annualIncome) {
-        this.annualIncome = annualIncome;
-    }
-
-    public String getUniversityId() {
-        return universityId;
-    }
-
-    public void setUniversityId(String universityId) {
-        this.universityId = universityId;
-    }
-
-    public String getDepartment() {
-        return department;
-    }
-
-    public void setDepartment(String department) {
-        this.department = department;
+    public void setAcademicYear(String academicYear) {
+        this.academicYear = academicYear;
     }
 
     public String getBranchGroup() {
@@ -356,52 +233,12 @@ public class UpdateStudentRequest {
         this.intermediateYear = intermediateYear;
     }
 
-    public Integer getSemester() {
-        return semester;
-    }
-
-    public void setSemester(Integer semester) {
-        this.semester = semester;
-    }
-
-    public String getSection() {
-        return section;
-    }
-
-    public void setSection(String section) {
-        this.section = section;
-    }
-
     public String getBatch() {
         return batch;
     }
 
     public void setBatch(String batch) {
         this.batch = batch;
-    }
-
-    public String getAcademicYear() {
-        return academicYear;
-    }
-
-    public void setAcademicYear(String academicYear) {
-        this.academicYear = academicYear;
-    }
-
-    public LocalDate getAdmissionDate() {
-        return admissionDate;
-    }
-
-    public void setAdmissionDate(LocalDate admissionDate) {
-        this.admissionDate = admissionDate;
-    }
-
-    public String getRegulation() {
-        return regulation;
-    }
-
-    public void setRegulation(String regulation) {
-        this.regulation = regulation;
     }
 
     public String getAdmissionType() {
@@ -420,12 +257,27 @@ public class UpdateStudentRequest {
         this.hostelDayScholar = hostelDayScholar;
     }
 
-    public String getMedium() {
-        return medium;
+    public String getSection() {
+        return section;
     }
 
-    public void setMedium(String medium) {
-        this.medium = medium;
+    public void setSection(String section) {
+        this.section = section;
+    }
+
+    public StudentStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(StudentStatus status) {
+        this.status = status;
+    }
+
+    public String getCampus() {
+        return campus;
+    }
+
+    public void setCampus(String campus) {
+        this.campus = campus;
     }
 }
-

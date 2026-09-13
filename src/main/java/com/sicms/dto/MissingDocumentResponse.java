@@ -4,7 +4,7 @@ public class MissingDocumentResponse {
 
     private String studentId;
     private String studentName;
-    private String rollNumber;
+    private String admissionNumber;
     private String branchGroup;
     private String intermediateYear;
     private String section;
@@ -31,12 +31,12 @@ public class MissingDocumentResponse {
         this.studentName = studentName;
     }
 
-    public String getRollNumber() {
-        return rollNumber;
+    public String getAdmissionNumber() {
+        return admissionNumber;
     }
 
-    public void setRollNumber(String rollNumber) {
-        this.rollNumber = rollNumber;
+    public void setAdmissionNumber(String admissionNumber) {
+        this.admissionNumber = admissionNumber;
     }
 
     public String getBranchGroup() {

@@ -10,6 +10,8 @@ public class UserDto {
     private String role;
     private String authProvider;
     private String profilePhotoUrl;
+    private Boolean mustChangePassword;
+    private String studentId;
 
     public UserDto() {
     }
@@ -18,9 +20,16 @@ public class UserDto {
         this.id = user.getId();
         this.fullName = user.getFullName();
         this.email = user.getEmail();
-        this.role = user.getRole().getRoleName().replace("ROLE_", "");
-        this.authProvider = user.getAuthProvider().name();
+        this.role = user.getRole() != null ? user.getRole().getRoleName().replace("ROLE_", "") : null;
+        this.authProvider = user.getAuthProvider() != null ? user.getAuthProvider().name() : null;
         this.profilePhotoUrl = user.getProfilePhotoUrl();
+        this.mustChangePassword = user.getMustChangePassword();
+        if (user.getStudent() != null) {
+            try {
+                this.studentId = user.getStudent().getStudentId();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     public Long getId() {
@@ -69,5 +78,21 @@ public class UserDto {
 
     public void setProfilePhotoUrl(String profilePhotoUrl) {
         this.profilePhotoUrl = profilePhotoUrl;
+    }
+
+    public Boolean getMustChangePassword() {
+        return mustChangePassword;
+    }
+
+    public void setMustChangePassword(Boolean mustChangePassword) {
+        this.mustChangePassword = mustChangePassword;
+    }
+
+    public String getStudentId() {
+        return studentId;
+    }
+
+    public void setStudentId(String studentId) {
+        this.studentId = studentId;
     }
 }

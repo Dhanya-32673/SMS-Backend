@@ -63,6 +63,12 @@ class SicmsApiIntegrationTest {
     @Autowired
     private OtpRepository otpRepository;
 
+    @Autowired
+    private com.sicms.repository.RoleRepository roleRepository;
+
+    @Autowired
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
     private String adminAccessToken;
     private String adminRefreshToken;
     private String facultyAccessToken;
@@ -74,7 +80,9 @@ class SicmsApiIntegrationTest {
     private String createdFacultyPassword = "TempPass123!";
 
     private Long createdSectionId;
+    private String createdSectionName = "Z" + (System.currentTimeMillis() % 1000);
     private String createdStudentId;
+    private String forbiddenStudentId;
     private Long createdDocumentTypeId;
     private Long uploadedDocumentId;
     private Long deletableDocumentId;
@@ -85,14 +93,41 @@ class SicmsApiIntegrationTest {
                 new JdkClientHttpRequestFactory(HttpClient.newHttpClient())
         );
 
+        Optional<com.sicms.entity.User> adminOpt = userRepository.findByEmailIgnoreCase("admin@college.edu");
+        if (adminOpt.isPresent()) {
+            com.sicms.entity.User admin = adminOpt.get();
+            admin.setPasswordHash(passwordEncoder.encode("AdminPass123!"));
+            admin.setAccountEnabled(true);
+            admin.setEmailVerified(true);
+            userRepository.save(admin);
+        }
+
+        Optional<com.sicms.entity.User> facultyOpt = userRepository.findByEmailIgnoreCase("2400032673cse1@gmail.com");
+        if (facultyOpt.isPresent()) {
+            com.sicms.entity.User faculty = facultyOpt.get();
+            faculty.setPasswordHash(passwordEncoder.encode("FacultyPass123!"));
+            faculty.setAccountEnabled(true);
+            faculty.setEmailVerified(true);
+            userRepository.save(faculty);
+        } else {
+            com.sicms.entity.Role facultyRole = roleRepository.findByRoleName("ROLE_FACULTY")
+                    .orElseGet(() -> roleRepository.save(new com.sicms.entity.Role("ROLE_FACULTY", "Faculty Member")));
+            com.sicms.entity.User faculty = new com.sicms.entity.User();
+            faculty.setEmail("2400032673cse1@gmail.com");
+            faculty.setFullName("Test Faculty");
+            faculty.setPasswordHash(passwordEncoder.encode("FacultyPass123!"));
+            faculty.setRole(facultyRole);
+            faculty.setAccountEnabled(true);
+            faculty.setEmailVerified(true);
+            userRepository.save(faculty);
+        }
+
         JsonNode adminLogin = login("admin@college.edu", "AdminPass123!");
         adminAccessToken = adminLogin.get("accessToken").asText();
         adminRefreshToken = adminLogin.get("refreshToken").asText();
 
         JsonNode facultyLogin = login("2400032673cse1@gmail.com", "FacultyPass123!");
         facultyAccessToken = facultyLogin.get("accessToken").asText();
-
-
     }
 
     @Test
@@ -169,7 +204,7 @@ class SicmsApiIntegrationTest {
         assertEquals(HttpStatus.OK, sections.getStatusCode());
 
         ResponseEntity<String> createSection = postJson("/api/academic/sections", Map.of(
-                "name", "Z",
+                "name", createdSectionName + "A",
                 "academicYear", "2026-2027",
                 "branchGroup", "MPC",
                 "intermediateYear", "1st Year",
@@ -184,7 +219,7 @@ class SicmsApiIntegrationTest {
                 "/api/academic/sections/" + createdSectionId,
                 HttpMethod.PUT,
                 Map.of(
-                        "name", "Z1",
+                        "name", createdSectionName,
                         "academicYear", "2026-2027",
                         "branchGroup", "MPC",
                         "intermediateYear", "1st Year",
@@ -289,7 +324,7 @@ class SicmsApiIntegrationTest {
                 Map.of(
                         "branchGroup", "MPC",
                         "intermediateYear", "1st Year",
-                        "section", "Z1",
+                        "section", createdSectionName,
                         "academicYear", "2026-2027",
                         "subjectName", "Automation Testing"
                 ),
@@ -308,7 +343,7 @@ class SicmsApiIntegrationTest {
         );
         assertEquals(HttpStatus.OK, disableFaculty.getStatusCode());
 
-        ResponseEntity<String> disabledLogin = postJson("/api/auth/login",
+        ResponseEntity<String> disabledLogin = postJson("/api/auth/faculty/login",
                 Map.of("email", createdFacultyEmail, "password", createdFacultyPassword), null);
         assertEquals(HttpStatus.FORBIDDEN, disabledLogin.getStatusCode());
 
@@ -389,81 +424,110 @@ class SicmsApiIntegrationTest {
         createdFacultyPassword = adminResetPassword;
 
         facultyLogin = login(createdFacultyEmail, createdFacultyPassword);
-        assertNotNull(facultyLogin.get("accessToken").asText());
+        facultyAccessToken = facultyLogin.get("accessToken").asText();
+        assertNotNull(facultyAccessToken);
     }
 
     @Test
     @Order(4)
     void studentEndpointsWork() throws Exception {
         ResponseEntity<String> invalidStudentCreate = postJson("/api/students", Map.ofEntries(
-                Map.entry("rollNumber", "AUTO-INVALID-" + System.currentTimeMillis()),
-                Map.entry("lastName", "Student"),
+                Map.entry("admissionNumber", "AUTO-INVALID-" + System.currentTimeMillis()),
                 Map.entry("gender", "MALE"),
                 Map.entry("dateOfBirth", "2008-01-01"),
                 Map.entry("mobileNumber", "9999999999"),
-                Map.entry("email", "invalid@example.com"),
-                Map.entry("address", "Test address"),
+                Map.entry("emailAddress1", "invalid@example.com"),
+                Map.entry("emailAddress2", "invalid2@example.com"),
                 Map.entry("fatherName", "Father"),
                 Map.entry("motherName", "Mother"),
-                Map.entry("parentMobile", "8888888888"),
                 Map.entry("branchGroup", "MPC"),
                 Map.entry("intermediateYear", "1st Year"),
-                Map.entry("section", "Z1"),
                 Map.entry("batch", "2026-2028"),
                 Map.entry("academicYear", "2026-2027"),
-                Map.entry("admissionDate", "2026-06-01"),
                 Map.entry("hostelDayScholar", "DAY_SCHOLAR")
         ), adminAccessToken);
         assertEquals(HttpStatus.BAD_REQUEST, invalidStudentCreate.getStatusCode());
 
-        String rollNumber = "AUTO-" + System.currentTimeMillis();
+        String admissionNumber = "ADM-" + System.currentTimeMillis();
         ResponseEntity<String> createStudent = postJson("/api/students", Map.ofEntries(
-                Map.entry("rollNumber", rollNumber),
-                Map.entry("firstName", "Auto"),
-                Map.entry("lastName", "Student"),
+                Map.entry("admissionNumber", admissionNumber),
+                Map.entry("fullName", "Auto Student"),
                 Map.entry("gender", "MALE"),
                 Map.entry("dateOfBirth", "2008-01-01"),
+                Map.entry("nationality", "Indian"),
+                Map.entry("religion", "Hindu"),
+                Map.entry("category", "General"),
+                Map.entry("aadhaarNumber", "123456789012"),
                 Map.entry("mobileNumber", "9999999999"),
-                Map.entry("email", "autostudent" + System.currentTimeMillis() + "@example.com"),
-                Map.entry("address", "Test address"),
+                Map.entry("alternateMobile", "8888888888"),
+                Map.entry("emailAddress1", "autostudent" + System.currentTimeMillis() + "@example.com"),
+                Map.entry("emailAddress2", "autostudent2" + System.currentTimeMillis() + "@example.com"),
                 Map.entry("fatherName", "Father"),
                 Map.entry("motherName", "Mother"),
-                Map.entry("parentMobile", "8888888888"),
                 Map.entry("branchGroup", "MPC"),
                 Map.entry("intermediateYear", "1st Year"),
-                Map.entry("section", "Z1"),
+                Map.entry("section", createdSectionName),
                 Map.entry("batch", "2026-2028"),
                 Map.entry("academicYear", "2026-2027"),
-                Map.entry("admissionDate", "2026-06-01"),
+                Map.entry("admissionType", "REGULAR"),
                 Map.entry("hostelDayScholar", "DAY_SCHOLAR")
         ), adminAccessToken);
         assertEquals(HttpStatus.CREATED, createStudent.getStatusCode(), createStudent.getBody());
         createdStudentId = readJson(createStudent).get("studentId").asText();
 
         ResponseEntity<String> duplicateStudent = postJson("/api/students", Map.ofEntries(
-                Map.entry("rollNumber", rollNumber),
-                Map.entry("firstName", "Auto"),
-                Map.entry("lastName", "Duplicate"),
+                Map.entry("admissionNumber", admissionNumber),
+                Map.entry("fullName", "Auto Duplicate"),
                 Map.entry("gender", "MALE"),
                 Map.entry("dateOfBirth", "2008-01-02"),
                 Map.entry("mobileNumber", "9999999998"),
-                Map.entry("email", "duplicate" + System.currentTimeMillis() + "@example.com"),
-                Map.entry("address", "Test address"),
+                Map.entry("emailAddress1", "duplicate" + System.currentTimeMillis() + "@example.com"),
+                Map.entry("emailAddress2", "duplicate2" + System.currentTimeMillis() + "@example.com"),
                 Map.entry("fatherName", "Father"),
                 Map.entry("motherName", "Mother"),
-                Map.entry("parentMobile", "8888888887"),
                 Map.entry("branchGroup", "MPC"),
                 Map.entry("intermediateYear", "1st Year"),
-                Map.entry("section", "Z1"),
+                Map.entry("section", createdSectionName),
                 Map.entry("batch", "2026-2028"),
                 Map.entry("academicYear", "2026-2027"),
-                Map.entry("admissionDate", "2026-06-01"),
+                Map.entry("admissionType", "REGULAR"),
                 Map.entry("hostelDayScholar", "DAY_SCHOLAR")
         ), adminAccessToken);
         assertEquals(HttpStatus.CONFLICT, duplicateStudent.getStatusCode());
 
+        ResponseEntity<String> createForbidden = postJson("/api/students", Map.ofEntries(
+                Map.entry("admissionNumber", "FORBIDDEN-" + System.currentTimeMillis()),
+                Map.entry("fullName", "Forbidden Student"),
+                Map.entry("gender", "FEMALE"),
+                Map.entry("dateOfBirth", "2008-03-03"),
+                Map.entry("mobileNumber", "9999999997"),
+                Map.entry("emailAddress1", "forbidden" + System.currentTimeMillis() + "@example.com"),
+                Map.entry("emailAddress2", "forbidden2" + System.currentTimeMillis() + "@example.com"),
+                Map.entry("fatherName", "Father"),
+                Map.entry("motherName", "Mother"),
+                Map.entry("branchGroup", "BiPC"),
+                Map.entry("intermediateYear", "1st Year"),
+                Map.entry("section", "Z2"),
+                Map.entry("batch", "2026-2028"),
+                Map.entry("academicYear", "2026-2027"),
+                Map.entry("admissionType", "REGULAR"),
+                Map.entry("hostelDayScholar", "DAY_SCHOLAR")
+        ), adminAccessToken);
+        assertEquals(HttpStatus.CREATED, createForbidden.getStatusCode(), createForbidden.getBody());
+        forbiddenStudentId = readJson(createForbidden).get("studentId").asText();
+
         ResponseEntity<String> students = exchange("/api/students", HttpMethod.GET, null, adminAccessToken, MediaType.APPLICATION_JSON);
         assertEquals(HttpStatus.OK, students.getStatusCode());
+
+        ResponseEntity<String> studentGroups = exchange("/api/students/groups", HttpMethod.GET, null, adminAccessToken, MediaType.APPLICATION_JSON);
+        assertEquals(HttpStatus.OK, studentGroups.getStatusCode());
+        assertTrue(readJson(studentGroups).isArray());
+
+        ResponseEntity<String> studentsGroupFilter = exchange("/api/students?group=MPC", HttpMethod.GET, null, adminAccessToken, MediaType.APPLICATION_JSON);
+        assertEquals(HttpStatus.OK, studentsGroupFilter.getStatusCode());
+
+        ResponseEntity<String> studentsCombinedFilter = exchange("/api/students?group=MPC&section=A&status=ACTIVE", HttpMethod.GET, null, adminAccessToken, MediaType.APPLICATION_JSON);
+        assertEquals(HttpStatus.OK, studentsCombinedFilter.getStatusCode());
 
         ResponseEntity<String> searchStudents = exchange("/api/students/search?query=Auto", HttpMethod.GET, null, adminAccessToken, MediaType.APPLICATION_JSON);
         assertEquals(HttpStatus.OK, searchStudents.getStatusCode());
@@ -475,8 +539,6 @@ class SicmsApiIntegrationTest {
                 "/api/students/" + createdStudentId,
                 HttpMethod.PUT,
                 Map.of(
-                        "firstName", "Updated",
-                        "lastName", "Student",
                         "fullName", "Updated Student",
                         "gender", "FEMALE",
                         "dateOfBirth", "2008-02-02",
@@ -485,7 +547,7 @@ class SicmsApiIntegrationTest {
                 adminAccessToken
         );
         assertEquals(HttpStatus.OK, updateStudent.getStatusCode());
-        assertEquals("Updated", readJson(updateStudent).get("firstName").asText());
+        assertEquals("Updated Student", readJson(updateStudent).get("fullName").asText());
 
         ResponseEntity<String> uploadPhoto = multipartRequest(
                 "/api/students/" + createdStudentId + "/photo",
@@ -508,10 +570,10 @@ class SicmsApiIntegrationTest {
         ResponseEntity<String> idCard = exchange("/api/students/" + createdStudentId + "/id-card", HttpMethod.GET, null, adminAccessToken, MediaType.APPLICATION_JSON);
         assertEquals(HttpStatus.OK, idCard.getStatusCode());
 
-        ResponseEntity<String> facultyAllowedStudent = exchange("/api/students/STU2026001001", HttpMethod.GET, null, facultyAccessToken, MediaType.APPLICATION_JSON);
+        ResponseEntity<String> facultyAllowedStudent = exchange("/api/students/" + createdStudentId, HttpMethod.GET, null, facultyAccessToken, MediaType.APPLICATION_JSON);
         assertEquals(HttpStatus.OK, facultyAllowedStudent.getStatusCode());
 
-        ResponseEntity<String> facultyForbiddenStudent = exchange("/api/students/STU2026001004", HttpMethod.GET, null, facultyAccessToken, MediaType.APPLICATION_JSON);
+        ResponseEntity<String> facultyForbiddenStudent = exchange("/api/students/" + forbiddenStudentId, HttpMethod.GET, null, facultyAccessToken, MediaType.APPLICATION_JSON);
         assertEquals(HttpStatus.FORBIDDEN, facultyForbiddenStudent.getStatusCode());
     }
 
@@ -590,7 +652,7 @@ class SicmsApiIntegrationTest {
         ResponseEntity<String> documentsByStudent = exchange("/api/documents/student/" + createdStudentId, HttpMethod.GET, null, adminAccessToken, MediaType.APPLICATION_JSON);
         assertEquals(HttpStatus.OK, documentsByStudent.getStatusCode());
 
-        ResponseEntity<String> facultyForbiddenDocuments = exchange("/api/documents/student/STU2026001004", HttpMethod.GET, null, facultyAccessToken, MediaType.APPLICATION_JSON);
+        ResponseEntity<String> facultyForbiddenDocuments = exchange("/api/documents/student/" + forbiddenStudentId, HttpMethod.GET, null, facultyAccessToken, MediaType.APPLICATION_JSON);
         assertEquals(HttpStatus.FORBIDDEN, facultyForbiddenDocuments.getStatusCode());
 
         ResponseEntity<String> studentSummariesAdmin = exchange("/api/documents/student-summaries", HttpMethod.GET, null, adminAccessToken, MediaType.APPLICATION_JSON);
@@ -688,6 +750,16 @@ class SicmsApiIntegrationTest {
     }
 
     private JsonNode login(String email, String password) throws Exception {
+        com.sicms.entity.User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
+        boolean isFaculty = user != null && user.getRole() != null &&
+                ("ROLE_FACULTY".equalsIgnoreCase(user.getRole().getRoleName()) || "FACULTY".equalsIgnoreCase(user.getRole().getRoleName()));
+
+        if (isFaculty) {
+            ResponseEntity<String> response = postJson("/api/auth/faculty/login", Map.of("email", email, "password", password), null);
+            assertEquals(HttpStatus.OK, response.getStatusCode(), response.getBody());
+            return readJson(response);
+        }
+
         ResponseEntity<String> response = postJson("/api/auth/login", Map.of("email", email, "password", password), null);
         assertEquals(HttpStatus.OK, response.getStatusCode(), response.getBody());
 

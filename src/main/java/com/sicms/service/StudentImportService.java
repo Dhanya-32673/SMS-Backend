@@ -25,8 +25,12 @@ import java.util.stream.Collectors;
 public class StudentImportService {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
-    private static final Pattern PAN_PATTERN = Pattern.compile("^[A-Z]{5}[0-9]{4}[A-Z]{1}$");
-    private static final Pattern DIGITS_ONLY = Pattern.compile("^[0-9]+$");
+
+    public static final Set<String> OFFICIAL_CAMPUSES = Set.of(
+        "TITANIC", "SUSRUTHA", "DHANVANTARI", "GIRLS", "VAIDEHI", "MEDEX",
+        "AIIMS CCO", "CCO", "ABDUL KALAM", "DCO", "INDRA BHAVAN", "APARNA",
+        "VISWAKARMA", "VASISTA", "GARUDA", "GCO", "ADITHYA CO", "VAARAHI"
+    );
 
     private final StudentRepository studentRepository;
     private final AcademicGroupRepository groupRepository;
@@ -36,6 +40,7 @@ public class StudentImportService {
     private final ExportAuditLogRepository auditLogRepository;
     private final FacultyService facultyService;
     private final FacultyAssignmentRepository assignmentRepository;
+    private final StudentService studentService;
 
     @Autowired
     public StudentImportService(
@@ -46,7 +51,8 @@ public class StudentImportService {
             StudentIdGeneratorService idGeneratorService,
             ExportAuditLogRepository auditLogRepository,
             @Autowired(required = false) FacultyService facultyService,
-            @Autowired(required = false) FacultyAssignmentRepository assignmentRepository
+            @Autowired(required = false) FacultyAssignmentRepository assignmentRepository,
+            @Autowired(required = false) StudentService studentService
     ) {
         this.studentRepository = studentRepository;
         this.groupRepository = groupRepository;
@@ -56,6 +62,7 @@ public class StudentImportService {
         this.auditLogRepository = auditLogRepository;
         this.facultyService = facultyService;
         this.assignmentRepository = assignmentRepository;
+        this.studentService = studentService;
     }
 
     public StudentImportService(
@@ -66,7 +73,7 @@ public class StudentImportService {
             StudentIdGeneratorService idGeneratorService,
             ExportAuditLogRepository auditLogRepository
     ) {
-        this(studentRepository, groupRepository, sectionRepository, userRepository, idGeneratorService, auditLogRepository, null, null);
+        this(studentRepository, groupRepository, sectionRepository, userRepository, idGeneratorService, auditLogRepository, null, null, null);
     }
 
     /**
@@ -106,12 +113,9 @@ public class StudentImportService {
      */
     @Transactional(readOnly = true)
     public StudentImportPreviewResponse validateImport(MultipartFile file) {
-        return validateAdminImport(file, null, null, null);
+        return validateAdminImport(file, null, null, null, null, null);
     }
 
-    /**
-     * Admin Validation: Validates uploaded Excel file with selected Group, Year, and Section.
-     */
     @Transactional(readOnly = true)
     public StudentImportPreviewResponse validateAdminImport(
             MultipartFile file,
@@ -119,6 +123,31 @@ public class StudentImportService {
             String intermediateYear,
             String section
     ) {
+        return validateAdminImport(file, null, branchGroup, null, intermediateYear, section);
+    }
+
+    /**
+     * Admin Validation: Validates uploaded Excel file with selected Campus, Group, and Academic Year.
+     */
+    @Transactional(readOnly = true)
+    public StudentImportPreviewResponse validateAdminImport(
+            MultipartFile file,
+            String campus,
+            String branchGroup,
+            String academicYear,
+            String intermediateYear,
+            String section
+    ) {
+        if (campus != null && !campus.isBlank()) {
+            String normCampus = campus.trim().toUpperCase();
+            if (!OFFICIAL_CAMPUSES.contains(normCampus)) {
+                StudentImportPreviewResponse res = new StudentImportPreviewResponse();
+                res.getHeaderErrors().add("Selected Campus '" + campus + "' is invalid. Must be one of the official master campuses.");
+                res.setCanProceed(false);
+                return res;
+            }
+        }
+
         AcademicSection targetSection = null;
         if (branchGroup != null && !branchGroup.isBlank() && section != null && !section.isBlank()) {
             AcademicGroup grp = groupRepository.findByActiveTrue().stream()
@@ -141,23 +170,12 @@ public class StudentImportService {
             }
         }
 
-        StudentImportPreviewResponse response = validateImportInternal(file, targetSection, null, "ROLE_ADMIN");
-        if (targetSection != null) {
-            response.setTargetGroup(targetSection.getBranchGroup());
-            response.setTargetYear(targetSection.getIntermediateYear());
-            response.setTargetSection(targetSection.getName());
-            response.setTargetAcademicYear(targetSection.getAcademicYear());
-        } else if (branchGroup != null && !branchGroup.isBlank()) {
-            response.setTargetGroup(branchGroup);
-            response.setTargetYear(intermediateYear);
-            response.setTargetSection(section);
-        }
-        response.setRole("ROLE_ADMIN");
+        StudentImportPreviewResponse response = validateImportInternal(file, campus, branchGroup, academicYear, targetSection, null, "ROLE_ADMIN");
         return response;
     }
 
     /**
-     * Faculty Validation: Validates uploaded Excel file using the authenticated faculty member's assigned section.
+     * Faculty Validation: Validates uploaded Excel file scoped to authorized section.
      */
     @Transactional(readOnly = true)
     public StudentImportPreviewResponse validateFacultyImport(
@@ -171,7 +189,10 @@ public class StudentImportService {
         Faculty faculty = facultyService.getFacultyByUserEmail(facultyEmail);
         List<FacultyAssignment> activeAssignments = assignmentRepository.findActiveByFacultyId(faculty.getId());
         if (activeAssignments == null || activeAssignments.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No active academic sections assigned to your faculty account. Please contact administrator.");
+            StudentImportPreviewResponse res = new StudentImportPreviewResponse();
+            res.getHeaderErrors().add("No active academic sections are assigned to your faculty account.");
+            res.setCanProceed(false);
+            return res;
         }
 
         FacultyAssignment targetAssignment;
@@ -186,18 +207,19 @@ public class StudentImportService {
 
         AcademicSection targetSection = resolveSection(targetAssignment.getBranchGroup(), targetAssignment.getIntermediateYear(), targetAssignment.getSection());
 
-        StudentImportPreviewResponse response = validateImportInternal(file, targetSection, targetAssignment, "ROLE_FACULTY");
+        StudentImportPreviewResponse response = validateImportInternal(file, null, targetAssignment.getBranchGroup(), targetAssignment.getAcademicYear(), targetSection, targetAssignment, "ROLE_FACULTY");
         response.setTargetGroup(targetAssignment.getBranchGroup());
         response.setTargetYear(targetAssignment.getIntermediateYear());
         response.setTargetSection(targetAssignment.getSection());
         response.setTargetAcademicYear(targetAssignment.getAcademicYear());
-        response.setAssignedFacultyName(faculty.getFullName());
-        response.setRole("ROLE_FACULTY");
         return response;
     }
 
     private StudentImportPreviewResponse validateImportInternal(
             MultipartFile file,
+            String targetCampus,
+            String targetGroup,
+            String targetAcademicYear,
             AcademicSection targetSection,
             FacultyAssignment targetAssignment,
             String role
@@ -242,18 +264,12 @@ public class StudentImportService {
             return response;
         }
 
-        // Preload active Academic Groups and Sections for fast O(1) resolution
+        // Preload active Academic Groups for validation
         Set<String> validGroups = groupRepository.findByActiveTrue().stream()
                 .map(g -> g.getCode().trim().toUpperCase())
                 .collect(Collectors.toSet());
 
-        List<AcademicSection> allSections = sectionRepository.findByActiveTrue();
-        Set<String> validSectionNames = allSections.stream()
-                .map(s -> s.getName().trim().toUpperCase())
-                .collect(Collectors.toSet());
-
         // Tracking duplicates within the file
-        Set<String> fileRolls = new HashSet<>();
         Set<String> fileAdmissions = new HashSet<>();
         Set<String> fileStudentIds = new HashSet<>();
 
@@ -263,6 +279,16 @@ public class StudentImportService {
 
         for (StudentImportRowDto row : rows) {
             // Apply target assignment if present
+            if (targetCampus != null && !targetCampus.isBlank()) {
+                row.setCampus(targetCampus.trim().toUpperCase());
+            }
+            if (targetGroup != null && !targetGroup.isBlank()) {
+                row.setBranchGroup(targetGroup.trim());
+            }
+            if (targetAcademicYear != null && !targetAcademicYear.isBlank()) {
+                row.setAcademicYear(targetAcademicYear.trim());
+            }
+
             if (targetSection != null) {
                 row.setBranchGroup(targetSection.getBranchGroup());
                 row.setIntermediateYear(targetSection.getIntermediateYear());
@@ -279,7 +305,7 @@ public class StudentImportService {
                 }
             }
 
-            validateRow(row, validGroups, validSectionNames, allSections, fileRolls, fileAdmissions, fileStudentIds);
+            validateRow(row, validGroups, fileAdmissions, fileStudentIds);
 
             if ("DUPLICATE".equals(row.getStatus())) {
                 duplicateCount++;
@@ -296,6 +322,13 @@ public class StudentImportService {
         response.setDuplicateRows(duplicateCount);
         response.setPreview(rows);
         response.setCanProceed(validCount > 0);
+        response.setTargetCampus(targetCampus);
+        response.setTargetGroup(targetGroup != null ? targetGroup : (targetSection != null ? targetSection.getBranchGroup() : null));
+        response.setTargetAcademicYear(targetAcademicYear != null ? targetAcademicYear : (targetSection != null ? targetSection.getAcademicYear() : null));
+        if (targetSection != null) {
+            response.setTargetYear(targetSection.getIntermediateYear());
+            response.setTargetSection(targetSection.getName());
+        }
 
         return response;
     }
@@ -311,17 +344,33 @@ public class StudentImportService {
             boolean updateExisting,
             String currentUserEmail
     ) {
-        return confirmAdminImport(file, null, null, null, skipDuplicates, updateExisting, currentUserEmail);
+        return confirmAdminImport(file, null, null, null, null, null, skipDuplicates, updateExisting, currentUserEmail);
     }
 
-    /**
-     * Admin Confirmation: Confirms import with selected Group, Year, and Section.
-     */
     @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
     @Transactional(rollbackFor = Exception.class)
     public StudentImportResultResponse confirmAdminImport(
             MultipartFile file,
             String branchGroup,
+            String intermediateYear,
+            String section,
+            boolean skipDuplicates,
+            boolean updateExisting,
+            String adminEmail
+    ) {
+        return confirmAdminImport(file, null, branchGroup, null, intermediateYear, section, skipDuplicates, updateExisting, adminEmail);
+    }
+
+    /**
+     * Admin Confirmation: Confirms import with selected Campus, Group, and Academic Year.
+     */
+    @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
+    @Transactional(rollbackFor = Exception.class)
+    public StudentImportResultResponse confirmAdminImport(
+            MultipartFile file,
+            String campus,
+            String branchGroup,
+            String academicYear,
             String intermediateYear,
             String section,
             boolean skipDuplicates,
@@ -335,7 +384,7 @@ public class StudentImportService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Section '" + section + "' is invalid or does not exist for the selected Group and Year.");
             }
         }
-        return confirmImportInternal(file, targetSection, null, skipDuplicates, updateExisting, adminEmail, "ROLE_ADMIN");
+        return confirmImportInternal(file, campus, branchGroup, academicYear, targetSection, null, skipDuplicates, updateExisting, adminEmail, "ROLE_ADMIN");
     }
 
     /**
@@ -371,11 +420,14 @@ public class StudentImportService {
 
         AcademicSection targetSection = resolveSection(targetAssignment.getBranchGroup(), targetAssignment.getIntermediateYear(), targetAssignment.getSection());
 
-        return confirmImportInternal(file, targetSection, targetAssignment, skipDuplicates, updateExisting, facultyEmail, "ROLE_FACULTY");
+        return confirmImportInternal(file, null, targetAssignment.getBranchGroup(), targetAssignment.getAcademicYear(), targetSection, targetAssignment, skipDuplicates, updateExisting, facultyEmail, "ROLE_FACULTY");
     }
 
     private StudentImportResultResponse confirmImportInternal(
             MultipartFile file,
+            String targetCampus,
+            String targetGroup,
+            String targetAcademicYear,
             AcademicSection targetSection,
             FacultyAssignment targetAssignment,
             boolean skipDuplicates,
@@ -412,12 +464,6 @@ public class StudentImportService {
                 .map(g -> g.getCode().trim().toUpperCase())
                 .collect(Collectors.toSet());
 
-        List<AcademicSection> allSections = sectionRepository.findByActiveTrue();
-        Set<String> validSectionNames = allSections.stream()
-                .map(s -> s.getName().trim().toUpperCase())
-                .collect(Collectors.toSet());
-
-        Set<String> fileRolls = new HashSet<>();
         Set<String> fileAdmissions = new HashSet<>();
         Set<String> fileStudentIds = new HashSet<>();
 
@@ -428,7 +474,16 @@ public class StudentImportService {
         List<StudentImportRowDto> failedRows = new ArrayList<>();
 
         for (StudentImportRowDto row : rows) {
-            // Apply target assignment if present
+            if (targetCampus != null && !targetCampus.isBlank()) {
+                row.setCampus(targetCampus.trim().toUpperCase());
+            }
+            if (targetGroup != null && !targetGroup.isBlank()) {
+                row.setBranchGroup(targetGroup.trim());
+            }
+            if (targetAcademicYear != null && !targetAcademicYear.isBlank()) {
+                row.setAcademicYear(targetAcademicYear.trim());
+            }
+
             if (targetSection != null) {
                 row.setBranchGroup(targetSection.getBranchGroup());
                 row.setIntermediateYear(targetSection.getIntermediateYear());
@@ -445,7 +500,7 @@ public class StudentImportService {
                 }
             }
 
-            validateRow(row, validGroups, validSectionNames, allSections, fileRolls, fileAdmissions, fileStudentIds);
+            validateRow(row, validGroups, fileAdmissions, fileStudentIds);
 
             if ("ERROR".equals(row.getStatus())) {
                 failedCount++;
@@ -491,18 +546,27 @@ public class StudentImportService {
         result.setFailedRows(failedRows);
         result.setCreatorRole(role);
 
-        String grp = targetSection != null ? targetSection.getBranchGroup() : (targetAssignment != null ? targetAssignment.getBranchGroup() : null);
+        String grp = targetGroup != null ? targetGroup : (targetSection != null ? targetSection.getBranchGroup() : (targetAssignment != null ? targetAssignment.getBranchGroup() : null));
         String yr = targetSection != null ? targetSection.getIntermediateYear() : (targetAssignment != null ? targetAssignment.getIntermediateYear() : null);
         String sec = targetSection != null ? targetSection.getName() : (targetAssignment != null ? targetAssignment.getSection() : null);
-        String ay = targetSection != null ? targetSection.getAcademicYear() : (targetAssignment != null ? targetAssignment.getAcademicYear() : null);
+        String ay = targetAcademicYear != null ? targetAcademicYear : (targetSection != null ? targetSection.getAcademicYear() : (targetAssignment != null ? targetAssignment.getAcademicYear() : null));
 
+        result.setTargetCampus(targetCampus);
         result.setTargetGroup(grp);
         result.setTargetYear(yr);
         result.setTargetSection(sec);
         result.setTargetAcademicYear(ay);
 
-        result.setMessage(String.format("Import completed: %d created, %d updated, %d skipped, %d failed.",
-                importedCount, updatedCount, skippedCount, failedCount));
+        if (targetCampus != null && !targetCampus.isBlank()) {
+            if (grp != null && ay != null) {
+                result.setMessage(String.format("%d students imported successfully to %s — %s — %s.", importedCount, targetCampus, grp, ay));
+            } else {
+                result.setMessage(String.format("%d students imported successfully to %s campus.", importedCount, targetCampus));
+            }
+        } else {
+            result.setMessage(String.format("Import completed: %d created, %d updated, %d skipped, %d failed.",
+                    importedCount, updatedCount, skippedCount, failedCount));
+        }
 
         // Audit Logging
         try {
@@ -535,33 +599,10 @@ public class StudentImportService {
     private void validateRow(
             StudentImportRowDto row,
             Set<String> validGroups,
-            Set<String> validSectionNames,
-            List<AcademicSection> allSections,
-            Set<String> fileRolls,
             Set<String> fileAdmissions,
             Set<String> fileStudentIds
     ) {
-        // 1. Required Personal Fields
-        if (isBlank(row.getRollNumber())) {
-            row.addError("Roll Number is required.");
-        } else {
-            String roll = row.getRollNumber().trim().toUpperCase();
-            if (!fileRolls.add(roll)) {
-                row.markDuplicate("Duplicate Roll Number '" + row.getRollNumber() + "' within Excel file.");
-            } else if (studentRepository.existsByRollNumberIgnoreCase(row.getRollNumber().trim())) {
-                row.markDuplicate("Student with Roll Number '" + row.getRollNumber() + "' already exists in database.");
-            }
-        }
-
-        if (!isBlank(row.getAdmissionNumber())) {
-            String adm = row.getAdmissionNumber().trim().toUpperCase();
-            if (!fileAdmissions.add(adm)) {
-                row.markDuplicate("Duplicate Admission Number '" + row.getAdmissionNumber() + "' within Excel file.");
-            } else if (studentRepository.existsByAdmissionNumberIgnoreCase(row.getAdmissionNumber().trim())) {
-                row.markDuplicate("Student with Admission Number '" + row.getAdmissionNumber() + "' already exists in database.");
-            }
-        }
-
+        // 1. Student ID
         if (!isBlank(row.getStudentId())) {
             String stuId = row.getStudentId().trim().toUpperCase();
             if (!fileStudentIds.add(stuId)) {
@@ -571,13 +612,22 @@ public class StudentImportService {
             }
         }
 
-        if (isBlank(row.getFirstName())) {
-            row.addError("First Name is required.");
-        }
-        if (isBlank(row.getLastName())) {
-            row.addError("Last Name is required.");
+        // 2. Admission Number
+        if (!isBlank(row.getAdmissionNumber())) {
+            String adm = row.getAdmissionNumber().trim().toUpperCase();
+            if (!fileAdmissions.add(adm)) {
+                row.markDuplicate("Duplicate Admission Number '" + row.getAdmissionNumber() + "' within Excel file.");
+            } else if (studentRepository.existsByAdmissionNumberIgnoreCase(row.getAdmissionNumber().trim())) {
+                row.markDuplicate("Student with Admission Number '" + row.getAdmissionNumber() + "' already exists in database.");
+            }
         }
 
+        // 3. Full Name
+        if (isBlank(row.getFullName())) {
+            row.addError("Full Name is required.");
+        }
+
+        // 4. Gender
         if (isBlank(row.getGender())) {
             row.addError("Gender is required.");
         } else {
@@ -589,32 +639,34 @@ public class StudentImportService {
             }
         }
 
+        // 5. Date of Birth
         if (row.getDateOfBirth() == null) {
             row.addError("Date of Birth is required and must be valid format (DD-MM-YYYY or YYYY-MM-DD).");
         } else if (!row.getDateOfBirth().isBefore(LocalDate.now())) {
             row.addError("Date of Birth must be in the past.");
         }
 
-        // Optional Personal Identifiers Validation
+        // 6. Nationality (optional, default Indian)
+        if (isBlank(row.getNationality())) {
+            row.setNationality("Indian");
+        }
+
+        // 7. Religion (optional)
+        // 8. Category (optional)
+
+        // 9. Aadhaar Number (optional, exactly 12 digits if provided)
         if (!isBlank(row.getAadhaarNumber())) {
             String cleanAadhaar = row.getAadhaarNumber().replaceAll("[^0-9]", "");
             if (cleanAadhaar.length() != 12) {
-                row.addError("Aadhaar Number must be exactly 12 digits.");
+                row.addError("Aadhaar Number must contain exactly 12 digits.");
             } else {
                 row.setAadhaarNumber(cleanAadhaar);
             }
         }
 
-        if (!isBlank(row.getPanNumber())) {
-            String cleanPan = row.getPanNumber().trim().toUpperCase();
-            if (!PAN_PATTERN.matcher(cleanPan).matches()) {
-                row.addError("Invalid PAN Number format '" + row.getPanNumber() + "' (expected ABCDE1234F).");
-            } else {
-                row.setPanNumber(cleanPan);
-            }
-        }
+        // 10. Profile Photo URL (optional)
 
-        // 2. Required Contact Details
+        // 11. Mobile Number (required, 10-15 digits)
         if (isBlank(row.getMobileNumber())) {
             row.addError("Mobile Number is required.");
         } else {
@@ -626,6 +678,7 @@ public class StudentImportService {
             }
         }
 
+        // 12. Alternate Mobile (optional, 10-15 digits)
         if (!isBlank(row.getAlternateMobile())) {
             String cleanAlt = row.getAlternateMobile().replaceAll("[^0-9]", "");
             if (cleanAlt.length() < 10 || cleanAlt.length() > 15) {
@@ -634,57 +687,38 @@ public class StudentImportService {
             row.setAlternateMobile(cleanAlt);
         }
 
-        if (isBlank(row.getEmail())) {
-            row.addError("Email Address is required.");
-        } else if (!EMAIL_PATTERN.matcher(row.getEmail().trim()).matches()) {
-            row.addError("Invalid Email Address format: '" + row.getEmail() + "'.");
+        // 13. Email Address - 1 (required, valid format)
+        if (isBlank(row.getEmailAddress1())) {
+            row.addError("Primary email address is required to create Student Portal account.");
+        } else if (!EMAIL_PATTERN.matcher(row.getEmailAddress1().trim()).matches()) {
+            row.addError("Invalid Email Address - 1: '" + row.getEmailAddress1() + "'.");
+        } else if (userRepository.existsByEmailIgnoreCase(row.getEmailAddress1().trim())) {
+            row.addError("This email address ('" + row.getEmailAddress1().trim() + "') is already registered with another account.");
         }
 
-        if (isBlank(row.getAddress())) {
-            row.addError("Residential Address is required.");
-        }
-        if (isBlank(row.getCity())) {
-            row.setCity("Hyderabad");
-        }
-        if (isBlank(row.getDistrict())) {
-            row.setDistrict("Hyderabad");
-        }
-        if (isBlank(row.getState())) {
-            row.setState("Telangana");
-        }
-        if (isBlank(row.getPinCode())) {
-            row.setPinCode("500001");
-        } else {
-            String cleanPin = row.getPinCode().replaceAll("[^0-9]", "");
-            if (cleanPin.length() != 6) {
-                row.addWarning("PIN Code usually contains 6 digits.");
-            }
-            row.setPinCode(cleanPin);
+        // 14. Email Address - 2 (required, valid format)
+        if (isBlank(row.getEmailAddress2())) {
+            row.addError("Email Address - 2 is required.");
+        } else if (!EMAIL_PATTERN.matcher(row.getEmailAddress2().trim()).matches()) {
+            row.addError("Invalid Email Address - 2: '" + row.getEmailAddress2() + "'.");
         }
 
-        // 3. Required Parent Details
+        // 15. Father Name (required)
         if (isBlank(row.getFatherName())) {
             row.addError("Father Name is required.");
         }
+
+        // 16. Mother Name (required)
         if (isBlank(row.getMotherName())) {
             row.addError("Mother Name is required.");
         }
-        if (isBlank(row.getParentMobile())) {
-            row.addError("Parent Mobile is required.");
-        } else {
-            String cleanParentMobile = row.getParentMobile().replaceAll("[^0-9]", "");
-            if (cleanParentMobile.length() < 10 || cleanParentMobile.length() > 15) {
-                row.addError("Parent Mobile must be a valid 10-digit number.");
-            } else {
-                row.setParentMobile(cleanParentMobile);
-            }
-        }
 
-        // 4. Required Academic Details
+        // 17. Academic Year (required)
         if (isBlank(row.getAcademicYear())) {
             row.addError("Academic Year is required (e.g. 2026-2027).");
         }
 
+        // 18. Branch / Group (required)
         if (isBlank(row.getBranchGroup())) {
             row.addError("Branch / Group is required (e.g. MPC, BiPC, MEC, CEC, HEC).");
         } else {
@@ -696,6 +730,7 @@ public class StudentImportService {
             }
         }
 
+        // 19. Intermediate Year (required)
         if (isBlank(row.getIntermediateYear())) {
             row.addError("Intermediate Year is required (1st Year / 2nd Year).");
         } else {
@@ -707,35 +742,25 @@ public class StudentImportService {
             }
         }
 
-        if (isBlank(row.getSection())) {
-            row.addError("Section is required (e.g. A, B, C, D).");
-        } else {
-            String sec = row.getSection().trim().replaceAll("(?i)^section\\s+", "").trim().toUpperCase();
-            if (sec.startsWith("SECTION ")) {
-                sec = sec.substring(8).trim();
-            }
-            if (!validSectionNames.isEmpty() && !validSectionNames.contains(sec)) {
-                row.addError("Section '" + row.getSection() + "' does not exist in master records.");
-            } else {
-                row.setSection(sec);
-            }
-        }
-
+        // 20. Batch (required)
         if (isBlank(row.getBatch())) {
             row.addError("Batch is required (e.g. 2026-2028).");
         }
 
-        if (row.getAdmissionDate() == null) {
-            row.addError("Admission Date is required.");
+        // 21. Admission Type (optional, default REGULAR)
+        if (isBlank(row.getAdmissionType())) {
+            row.setAdmissionType("REGULAR");
         }
 
+        // 22. Hostel / Day Scholar (required)
         if (isBlank(row.getHostelDayScholar())) {
             row.setHostelDayScholar("DAY_SCHOLAR");
         } else {
             String h = row.getHostelDayScholar().trim().toUpperCase().replace(" ", "_");
-            if (!"DAY_SCHOLAR".equals(h) && !"HOSTELLER".equals(h)) {
-                row.addError("Hostel / Day Scholar must be DAY_SCHOLAR or HOSTELLER.");
+            if (!"DAY_SCHOLAR".equals(h) && !"HOSTEL".equals(h) && !"HOSTELLER".equals(h)) {
+                row.addError("Hostel / Day Scholar must be DAY_SCHOLAR or HOSTEL.");
             } else {
+                if ("HOSTELLER".equals(h)) h = "HOSTEL";
                 row.setHostelDayScholar(h);
             }
         }
@@ -744,101 +769,96 @@ public class StudentImportService {
     private void createNewStudent(StudentImportRowDto row, User adminUser) {
         Student student = new Student();
 
-        // 1. Assign unique Student ID
+        // 1. Student ID
         String stuId = row.getStudentId();
         if (isBlank(stuId)) {
             stuId = idGeneratorService.generateStudentId();
         }
         student.setStudentId(stuId.trim());
 
-        student.setRollNumber(row.getRollNumber().trim());
+        // 2. Admission Number
         student.setAdmissionNumber(!isBlank(row.getAdmissionNumber()) ? row.getAdmissionNumber().trim() : null);
-        student.setFirstName(row.getFirstName().trim());
-        student.setMiddleName(!isBlank(row.getMiddleName()) ? row.getMiddleName().trim() : null);
-        student.setLastName(row.getLastName().trim());
-        student.setFullName(row.getFullName());
+
+        // 3. Full Name
+        student.setFullName(row.getFullName().trim());
+
+        // 4. Gender
         student.setGender(row.getGender());
+
+        // 5. Date of Birth
         student.setDateOfBirth(row.getDateOfBirth());
-        student.setBloodGroup(row.getBloodGroup());
-        student.setNationality(row.getNationality());
+
+        // 6. Nationality
+        student.setNationality(row.getNationality() != null ? row.getNationality() : "Indian");
+
+        // 7. Religion
         student.setReligion(row.getReligion());
-        student.setCasteCategory(row.getCasteCategory());
+
+        // 8. Category
+        student.setCategory(row.getCategory());
+
+        // 9. Aadhaar Number
         student.setAadhaarNumber(row.getAadhaarNumber());
-        student.setPanNumber(row.getPanNumber());
-        student.setIdentificationMarks(row.getIdentificationMarks());
+
+        // 10. Profile Photo URL
         student.setProfilePhotoUrl(row.getProfilePhotoUrl());
 
-        try {
-            student.setStatus(StudentStatus.valueOf(row.getStudentStatus().toUpperCase()));
-        } catch (Exception e) {
-            student.setStatus(StudentStatus.ACTIVE);
+        // 11. Mobile Number
+        student.setMobileNumber(row.getMobileNumber());
+
+        // 12. Alternate Mobile
+        student.setAlternateMobile(row.getAlternateMobile());
+
+        // 13. Email Address - 1
+        student.setEmailAddress1(row.getEmailAddress1().trim());
+
+        // 14. Email Address - 2
+        student.setEmailAddress2(row.getEmailAddress2().trim());
+
+        // 15. Father Name
+        student.setFatherName(row.getFatherName().trim());
+
+        // 16. Mother Name
+        student.setMotherName(row.getMotherName().trim());
+
+        // 17. Academic Year
+        student.setAcademicYear(row.getAcademicYear().trim());
+
+        // 18. Branch / Group
+        student.setBranchGroup(row.getBranchGroup().trim());
+
+        // 19. Intermediate Year
+        student.setIntermediateYear(row.getIntermediateYear().trim());
+
+        // 20. Batch
+        student.setBatch(row.getBatch().trim());
+
+        // 21. Admission Type
+        student.setAdmissionType(row.getAdmissionType());
+
+        // 22. Hostel / Day Scholar
+        student.setHostelDayScholar(row.getHostelDayScholar());
+
+        // 23. Campus
+        if (!isBlank(row.getCampus())) {
+            student.setCampus(row.getCampus().trim());
         }
 
+        // Technical fields
+        student.setStatus(StudentStatus.ACTIVE);
+        student.setSection(row.getSection() != null ? row.getSection() : "Unassigned");
         student.setCreatedBy(adminUser);
 
-        // 2. Contact Detail
-        StudentContactDetail contact = new StudentContactDetail();
-        contact.setMobileNumber(row.getMobileNumber());
-        contact.setAlternateMobile(row.getAlternateMobile());
-        contact.setEmail(row.getEmail());
-        contact.setAddress(row.getAddress());
-        contact.setCity(row.getCity());
-        contact.setDistrict(row.getDistrict());
-        contact.setState(row.getState());
-        contact.setPinCode(row.getPinCode());
-        contact.setCountry(row.getCountry());
-        student.setContactDetail(contact);
-
-        // 3. Parent Detail
-        StudentParentDetail parent = new StudentParentDetail();
-        parent.setFatherName(row.getFatherName());
-        parent.setMotherName(row.getMotherName());
-        parent.setParentMobile(row.getParentMobile());
-        parent.setParentEmail(row.getParentEmail());
-        parent.setOccupation(row.getOccupation());
-        parent.setAnnualIncome(row.getAnnualIncome());
-        student.setParentDetail(parent);
-
-        // 4. Academic Detail
-        StudentAcademicDetail academic = new StudentAcademicDetail();
-        academic.setAcademicYear(row.getAcademicYear());
-        academic.setDepartment(row.getDepartment());
-        academic.setBranchGroup(row.getBranchGroup());
-        academic.setIntermediateYear(row.getIntermediateYear());
-        academic.setSemester(row.getSemester());
-        academic.setSection(row.getSection());
-        academic.setBatch(row.getBatch());
-        academic.setAdmissionDate(row.getAdmissionDate());
-        academic.setAdmissionType(row.getAdmissionType());
-        academic.setHostelDayScholar(row.getHostelDayScholar());
-        academic.setMedium(row.getMedium());
-        academic.setRegulation(row.getRegulation());
-        academic.setUniversityId(row.getUniversityId());
-        student.setAcademicDetail(academic);
-
-        // 5. Guardian Detail (if provided)
-        if (!isBlank(row.getGuardianName()) || !isBlank(row.getGuardianMobile())) {
-            StudentGuardian guardian = new StudentGuardian();
-            guardian.setGuardianName(row.getGuardianName());
-            guardian.setGuardianMobile(row.getGuardianMobile());
-            guardian.setRelationship(row.getGuardianRelation());
-            guardian.setGuardianAddress(row.getGuardianAddress());
-            guardian.setFatherName(row.getFatherName());
-            guardian.setMotherName(row.getMotherName());
-            guardian.setStudent(student);
-            student.setGuardianDetail(guardian);
+        Student saved = studentRepository.save(student);
+        if (studentService != null) {
+            studentService.createStudentUserAccount(saved);
         }
-
-        studentRepository.save(student);
     }
 
     private void updateExistingStudent(StudentImportRowDto row, User adminUser) {
         Student student = null;
         if (!isBlank(row.getStudentId())) {
             student = studentRepository.findByStudentId(row.getStudentId().trim()).orElse(null);
-        }
-        if (student == null && !isBlank(row.getRollNumber())) {
-            student = studentRepository.findByRollNumberIgnoreCase(row.getRollNumber().trim()).orElse(null);
         }
         if (student == null && !isBlank(row.getAdmissionNumber())) {
             student = studentRepository.findByAdmissionNumberIgnoreCase(row.getAdmissionNumber().trim()).orElse(null);
@@ -848,69 +868,27 @@ public class StudentImportService {
             throw new IllegalStateException("Existing student not found for update.");
         }
 
-        student.setFirstName(row.getFirstName().trim());
-        if (!isBlank(row.getMiddleName())) student.setMiddleName(row.getMiddleName().trim());
-        student.setLastName(row.getLastName().trim());
-        student.setFullName(row.getFullName());
-        student.setGender(row.getGender());
-        student.setDateOfBirth(row.getDateOfBirth());
-        if (!isBlank(row.getBloodGroup())) student.setBloodGroup(row.getBloodGroup());
+        if (!isBlank(row.getFullName())) student.setFullName(row.getFullName().trim());
+        if (!isBlank(row.getGender())) student.setGender(row.getGender());
+        if (row.getDateOfBirth() != null) student.setDateOfBirth(row.getDateOfBirth());
         if (!isBlank(row.getNationality())) student.setNationality(row.getNationality());
         if (!isBlank(row.getReligion())) student.setReligion(row.getReligion());
-        if (!isBlank(row.getCasteCategory())) student.setCasteCategory(row.getCasteCategory());
+        if (!isBlank(row.getCategory())) student.setCategory(row.getCategory());
         if (!isBlank(row.getAadhaarNumber())) student.setAadhaarNumber(row.getAadhaarNumber());
-        if (!isBlank(row.getPanNumber())) student.setPanNumber(row.getPanNumber());
-        if (!isBlank(row.getIdentificationMarks())) student.setIdentificationMarks(row.getIdentificationMarks());
         if (!isBlank(row.getProfilePhotoUrl())) student.setProfilePhotoUrl(row.getProfilePhotoUrl());
-
-        // Contact
-        StudentContactDetail contact = student.getContactDetail();
-        if (contact == null) {
-            contact = new StudentContactDetail();
-            student.setContactDetail(contact);
-        }
-        contact.setMobileNumber(row.getMobileNumber());
-        if (!isBlank(row.getAlternateMobile())) contact.setAlternateMobile(row.getAlternateMobile());
-        contact.setEmail(row.getEmail());
-        contact.setAddress(row.getAddress());
-        contact.setCity(row.getCity());
-        contact.setDistrict(row.getDistrict());
-        contact.setState(row.getState());
-        contact.setPinCode(row.getPinCode());
-        contact.setCountry(row.getCountry());
-
-        // Parent
-        StudentParentDetail parent = student.getParentDetail();
-        if (parent == null) {
-            parent = new StudentParentDetail();
-            student.setParentDetail(parent);
-        }
-        parent.setFatherName(row.getFatherName());
-        parent.setMotherName(row.getMotherName());
-        parent.setParentMobile(row.getParentMobile());
-        if (!isBlank(row.getParentEmail())) parent.setParentEmail(row.getParentEmail());
-        if (!isBlank(row.getOccupation())) parent.setOccupation(row.getOccupation());
-        if (row.getAnnualIncome() != null) parent.setAnnualIncome(row.getAnnualIncome());
-
-        // Academic
-        StudentAcademicDetail academic = student.getAcademicDetail();
-        if (academic == null) {
-            academic = new StudentAcademicDetail();
-            student.setAcademicDetail(academic);
-        }
-        academic.setAcademicYear(row.getAcademicYear());
-        academic.setDepartment(row.getDepartment());
-        academic.setBranchGroup(row.getBranchGroup());
-        academic.setIntermediateYear(row.getIntermediateYear());
-        if (row.getSemester() != null) academic.setSemester(row.getSemester());
-        academic.setSection(row.getSection());
-        academic.setBatch(row.getBatch());
-        academic.setAdmissionDate(row.getAdmissionDate());
-        if (!isBlank(row.getAdmissionType())) academic.setAdmissionType(row.getAdmissionType());
-        academic.setHostelDayScholar(row.getHostelDayScholar());
-        if (!isBlank(row.getMedium())) academic.setMedium(row.getMedium());
-        if (!isBlank(row.getRegulation())) academic.setRegulation(row.getRegulation());
-        if (!isBlank(row.getUniversityId())) academic.setUniversityId(row.getUniversityId());
+        if (!isBlank(row.getMobileNumber())) student.setMobileNumber(row.getMobileNumber());
+        if (!isBlank(row.getAlternateMobile())) student.setAlternateMobile(row.getAlternateMobile());
+        if (!isBlank(row.getEmailAddress1())) student.setEmailAddress1(row.getEmailAddress1().trim());
+        if (!isBlank(row.getEmailAddress2())) student.setEmailAddress2(row.getEmailAddress2().trim());
+        if (!isBlank(row.getFatherName())) student.setFatherName(row.getFatherName().trim());
+        if (!isBlank(row.getMotherName())) student.setMotherName(row.getMotherName().trim());
+        if (!isBlank(row.getAcademicYear())) student.setAcademicYear(row.getAcademicYear().trim());
+        if (!isBlank(row.getBranchGroup())) student.setBranchGroup(row.getBranchGroup().trim());
+        if (!isBlank(row.getIntermediateYear())) student.setIntermediateYear(row.getIntermediateYear().trim());
+        if (!isBlank(row.getBatch())) student.setBatch(row.getBatch().trim());
+        if (!isBlank(row.getAdmissionType())) student.setAdmissionType(row.getAdmissionType());
+        if (!isBlank(row.getHostelDayScholar())) student.setHostelDayScholar(row.getHostelDayScholar());
+        if (!isBlank(row.getSection())) student.setSection(row.getSection());
 
         studentRepository.save(student);
     }

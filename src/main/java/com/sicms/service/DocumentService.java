@@ -40,10 +40,12 @@ import com.sicms.entity.Faculty;
 import com.sicms.entity.Student;
 import com.sicms.entity.StudentDocument;
 import com.sicms.entity.StudentStatus;
+import com.sicms.entity.User;
 import com.sicms.repository.DocumentTypeRepository;
 import com.sicms.repository.DocumentVersionRepository;
 import com.sicms.repository.StudentDocumentRepository;
 import com.sicms.repository.StudentRepository;
+import com.sicms.repository.UserRepository;
 
 @Service
 public class DocumentService {
@@ -52,6 +54,7 @@ public class DocumentService {
     private final DocumentTypeRepository documentTypeRepository;
     private final DocumentVersionRepository versionRepository;
     private final StudentRepository studentRepository;
+    private final UserRepository userRepository;
     private final DocumentStorageService storageService;
     private final FacultyService facultyService;
 
@@ -61,12 +64,14 @@ public class DocumentService {
             DocumentTypeRepository documentTypeRepository,
             DocumentVersionRepository versionRepository,
             StudentRepository studentRepository,
+            UserRepository userRepository,
             DocumentStorageService storageService,
             FacultyService facultyService) {
         this.documentRepository = documentRepository;
         this.documentTypeRepository = documentTypeRepository;
         this.versionRepository = versionRepository;
         this.studentRepository = studentRepository;
+        this.userRepository = userRepository;
         this.storageService = storageService;
         this.facultyService = facultyService;
     }
@@ -255,6 +260,47 @@ public class DocumentService {
     }
 
     @Transactional(readOnly = true)
+    public List<DocumentResponse> getDocumentsForCurrentStudent(String userEmail) {
+        if (userEmail == null || userEmail.isBlank()) {
+            return Collections.emptyList();
+        }
+        String cleanId = userEmail.trim();
+        Student student = null;
+
+        // 1. Try to find User by email/identifier first
+        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(cleanId);
+        if (userOpt.isPresent() && userOpt.get().getStudent() != null) {
+            student = userOpt.get().getStudent();
+        }
+
+        // 2. Try studentRepository lookups if not found via User
+        if (student == null) {
+            student = studentRepository.findByEmailOrStudentId(cleanId).orElse(null);
+        }
+
+        String prefix = cleanId;
+        if (student == null && cleanId.contains("@")) {
+            prefix = cleanId.substring(0, cleanId.indexOf("@")).trim();
+            student = studentRepository.findByEmailOrStudentId(prefix).orElse(null);
+        }
+        if (student == null) {
+            student = studentRepository.findByStudentIdIgnoreCase(prefix).orElse(null);
+        }
+        if (student == null) {
+            student = studentRepository.findByAdmissionNumberIgnoreCase(prefix).orElse(null);
+        }
+
+        if (student == null) {
+            return Collections.emptyList();
+        }
+
+        return documentRepository.findByStudentId(student.getId())
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public PaginatedStudentResponse<DocumentSummaryResponse> filterAndSearchDocuments(
             int page, int size, String studentId, Long documentTypeId, DocumentCategory category,
             DocumentStatus status, String search, String sortBy, String sortDir,
@@ -281,7 +327,8 @@ public class DocumentService {
             r.setId(d.getId());
             r.setStudentId(d.getStudent().getStudentId());
             r.setStudentName(d.getStudent().getFullName());
-            r.setRollNumber(d.getStudent().getRollNumber());
+            r.setAdmissionNumber(d.getStudent().getAdmissionNumber());
+            r.setRollNumber(d.getStudent().getAdmissionNumber());
             r.setDocumentTypeName(d.getDocumentType().getName());
             r.setCategory(d.getDocumentType().getCategory());
             r.setOriginalFileName(d.getOriginalFileName());
@@ -376,12 +423,10 @@ public class DocumentService {
                     MissingDocumentResponse res = new MissingDocumentResponse();
                     res.setStudentId(st.getStudentId());
                     res.setStudentName(st.getFullName());
-                    res.setRollNumber(st.getRollNumber());
-                    if (st.getAcademicDetail() != null) {
-                        res.setBranchGroup(st.getAcademicDetail().getBranchGroup());
-                        res.setIntermediateYear(st.getAcademicDetail().getIntermediateYear());
-                        res.setSection(st.getAcademicDetail().getSection());
-                    }
+                    res.setAdmissionNumber(st.getAdmissionNumber());
+                    res.setBranchGroup(st.getBranchGroup());
+                    res.setIntermediateYear(st.getIntermediateYear());
+                    res.setSection(st.getSection());
                     res.setMissingDocumentCode(reqType.getCode());
                     res.setMissingDocumentName(reqType.getName());
                     res.setCategory(reqType.getCategory().name());
@@ -512,35 +557,35 @@ public class DocumentService {
                     String q = search.trim().toLowerCase();
                     boolean matchName = st.getFullName() != null && st.getFullName().toLowerCase().contains(q);
                     boolean matchId = st.getStudentId() != null && st.getStudentId().toLowerCase().contains(q);
-                    boolean matchRoll = st.getRollNumber() != null && st.getRollNumber().toLowerCase().contains(q);
-                    if (!matchName && !matchId && !matchRoll) {
+                    boolean matchAdm = st.getAdmissionNumber() != null && st.getAdmissionNumber().toLowerCase().contains(q);
+                    if (!matchName && !matchId && !matchAdm) {
                         matches = false;
                     }
                 }
 
                 if (matches && group != null && !group.isBlank()) {
-                    String stGroup = st.getAcademicDetail() != null ? st.getAcademicDetail().getBranchGroup() : null;
+                    String stGroup = st.getBranchGroup();
                     if (stGroup == null || !stGroup.equalsIgnoreCase(group.trim())) {
                         matches = false;
                     }
                 }
 
                 if (matches && year != null && !year.isBlank()) {
-                    String stYear = st.getAcademicDetail() != null ? st.getAcademicDetail().getIntermediateYear() : null;
+                    String stYear = st.getIntermediateYear();
                     if (stYear == null || !stYear.equalsIgnoreCase(year.trim())) {
                         matches = false;
                     }
                 }
 
                 if (matches && section != null && !section.isBlank()) {
-                    String stSection = st.getAcademicDetail() != null ? st.getAcademicDetail().getSection() : null;
+                    String stSection = st.getSection();
                     if (stSection == null || !stSection.equalsIgnoreCase(section.trim())) {
                         matches = false;
                     }
                 }
 
                 if (matches && academicYear != null && !academicYear.isBlank()) {
-                    String stAcadYear = st.getAcademicDetail() != null ? st.getAcademicDetail().getAcademicYear() : null;
+                    String stAcadYear = st.getAcademicYear();
                     if (stAcadYear == null || !stAcadYear.equalsIgnoreCase(academicYear.trim())) {
                         matches = false;
                     }
@@ -551,17 +596,15 @@ public class DocumentService {
                     dto.setId(st.getId());
                     dto.setStudentId(st.getStudentId());
                     dto.setFullName(st.getFullName());
-                    dto.setRollNumber(st.getRollNumber());
+                    dto.setRollNumber(st.getAdmissionNumber());
                     dto.setAdmissionNumber(st.getAdmissionNumber());
                     dto.setProfilePhotoUrl(st.getProfilePhotoUrl());
                     dto.setStatus(st.getStatus() != null ? st.getStatus().name() : "ACTIVE");
 
-                    if (st.getAcademicDetail() != null) {
-                        dto.setBranchGroup(st.getAcademicDetail().getBranchGroup());
-                        dto.setIntermediateYear(st.getAcademicDetail().getIntermediateYear());
-                        dto.setAcademicYear(st.getAcademicDetail().getAcademicYear());
-                        dto.setSection(st.getAcademicDetail().getSection());
-                    }
+                    dto.setBranchGroup(st.getBranchGroup());
+                    dto.setIntermediateYear(st.getIntermediateYear());
+                    dto.setAcademicYear(st.getAcademicYear());
+                    dto.setSection(st.getSection());
 
                     dto.setTotalRequiredCount(totalReq);
                     dto.setUploadedCount(uploadedCount);
@@ -660,9 +703,9 @@ public class DocumentService {
         List<StudentCertificateSummaryResponse> summaries = new ArrayList<>();
 
         for (Student st : allStudents) {
-            String bGroup = st.getAcademicDetail() != null ? st.getAcademicDetail().getBranchGroup() : "";
-            String iYear = st.getAcademicDetail() != null ? st.getAcademicDetail().getIntermediateYear() : "";
-            String sec = st.getAcademicDetail() != null ? st.getAcademicDetail().getSection() : "";
+            String bGroup = st.getBranchGroup() != null ? st.getBranchGroup() : "";
+            String iYear = st.getIntermediateYear() != null ? st.getIntermediateYear() : "";
+            String sec = st.getSection() != null ? st.getSection() : "";
 
             if (group != null && !group.trim().isEmpty() && !bGroup.equalsIgnoreCase(group.trim())) {
                 continue;
@@ -680,8 +723,7 @@ public class DocumentService {
                 String q = search.trim().toLowerCase();
                 boolean matches = (st.getStudentId() != null && st.getStudentId().toLowerCase().contains(q)) ||
                         (st.getFullName() != null && st.getFullName().toLowerCase().contains(q)) ||
-                        (st.getRollNumber() != null && st.getRollNumber().toLowerCase().contains(q)) ||
-                        (st.getAcademicDetail() != null && st.getAcademicDetail().getUniversityId() != null && st.getAcademicDetail().getUniversityId().toLowerCase().contains(q));
+                        (st.getAdmissionNumber() != null && st.getAdmissionNumber().toLowerCase().contains(q));
                 if (!matches) continue;
             }
 
@@ -725,8 +767,8 @@ public class DocumentService {
             summary.setId(st.getId());
             summary.setStudentId(st.getStudentId());
             summary.setFullName(st.getFullName());
-            summary.setRollNumber(st.getRollNumber());
-            summary.setAdmissionNumber(st.getAdmissionNumber() != null ? st.getAdmissionNumber() : (st.getAcademicDetail() != null ? st.getAcademicDetail().getUniversityId() : "N/A"));
+            summary.setRollNumber(st.getAdmissionNumber());
+            summary.setAdmissionNumber(st.getAdmissionNumber() != null ? st.getAdmissionNumber() : "N/A");
             summary.setProfilePhotoUrl(st.getProfilePhotoUrl());
             summary.setBranchGroup(com.sicms.util.StudentFormatterUtil.formatBranchGroup(bGroup));
             summary.setIntermediateYear(com.sicms.util.StudentFormatterUtil.formatIntermediateYear(iYear));
@@ -782,13 +824,18 @@ public class DocumentService {
     private DocumentResponse mapToResponse(StudentDocument doc) {
         DocumentResponse res = new DocumentResponse();
         res.setId(doc.getId());
-        res.setStudentId(doc.getStudent().getStudentId());
-        res.setStudentName(doc.getStudent().getFullName());
-        res.setRollNumber(doc.getStudent().getRollNumber());
-        res.setDocumentTypeId(doc.getDocumentType().getId());
-        res.setDocumentTypeCode(doc.getDocumentType().getCode());
-        res.setDocumentTypeName(doc.getDocumentType().getName());
-        res.setCategory(doc.getDocumentType().getCategory());
+        if (doc.getStudent() != null) {
+            res.setStudentId(doc.getStudent().getStudentId());
+            res.setStudentName(doc.getStudent().getFullName());
+            res.setAdmissionNumber(doc.getStudent().getAdmissionNumber());
+            res.setRollNumber(doc.getStudent().getAdmissionNumber());
+        }
+        if (doc.getDocumentType() != null) {
+            res.setDocumentTypeId(doc.getDocumentType().getId());
+            res.setDocumentTypeCode(doc.getDocumentType().getCode());
+            res.setDocumentTypeName(doc.getDocumentType().getName());
+            res.setCategory(doc.getDocumentType().getCategory());
+        }
         res.setDocumentNumber(doc.getDocumentNumber());
         res.setStoragePath(doc.getStoragePath());
         res.setOriginalFileName(doc.getOriginalFileName());

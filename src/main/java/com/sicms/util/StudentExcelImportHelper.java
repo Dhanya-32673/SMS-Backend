@@ -18,7 +18,7 @@ import java.util.*;
 
 /**
  * Utility class for parsing student import Excel files, generating import templates,
- * and generating error report workbooks.
+ * and generating error report workbooks based on the official 22 canonical columns.
  */
 public class StudentExcelImportHelper {
 
@@ -26,34 +26,73 @@ public class StudentExcelImportHelper {
     private static final DateTimeFormatter YYYY_MM_DD = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DD_SLASH_MM_YYYY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
-    // Canonical headers for template and export compatibility
+    // Official 22 canonical headers matching the approved Excel template
     public static final String[] TEMPLATE_HEADERS = {
-        // 1. Identifiers & Personal Details (0 - 17)
-        "Student ID", "Admission Number", "Roll Number *",
-        "First Name *", "Middle Name", "Last Name *", "Full Name",
-        "Gender *", "Date of Birth *", "Blood Group",
-        "Nationality", "Religion", "Category",
-        "Aadhaar Number", "PAN Number", "Identification Marks", "Profile Photo URL", "Status",
-
-        // 2. Contact & Address Details (18 - 26)
-        "Mobile Number *", "Alternate Mobile", "Email Address *",
-        "Address *", "City *", "District *", "State *", "PIN Code *", "Country *",
-
-        // 3. Parent & Guardian Details (27 - 36)
-        "Father Name *", "Mother Name *", "Parent Mobile *",
-        "Parent Email", "Occupation", "Annual Income",
-        "Guardian Name", "Guardian Mobile", "Guardian Relation", "Guardian Address",
-
-        // 4. Academic Details (37 - 49)
-        "Academic Year *", "Department", "Branch / Group *",
-        "Intermediate Year *", "Semester", "Section *",
-        "Batch *", "Admission Date *", "Admission Type",
-        "Hostel / Day Scholar *", "Medium", "Regulation", "University / Board ID"
+        "Student ID",
+        "Admission Number",
+        "Full Name *",
+        "Gender *",
+        "Date of Birth *",
+        "Nationality",
+        "Religion",
+        "Category",
+        "Aadhaar Number",
+        "Profile Photo URL",
+        "Mobile Number *",
+        "Alternate Mobile",
+        "Email Address - 1 *",
+        "Email Address - 2 *",
+        "Father Name *",
+        "Mother Name *",
+        "Academic Year *",
+        "Branch / Group *",
+        "Intermediate Year *",
+        "Batch *",
+        "Admission Type",
+        "Hostel / Day Scholar *"
     };
 
+    public static final String[] SAMPLE_VALUES = {
+        "",                             // 1. Student ID (blank for auto-generation)
+        "ADM2026001",                   // 2. Admission Number
+        "Rahul Kumar Sharma",           // 3. Full Name
+        "MALE",                         // 4. Gender
+        "15-06-2008",                   // 5. Date of Birth
+        "Indian",                       // 6. Nationality
+        "Hindu",                        // 7. Religion
+        "OC",                           // 8. Category
+        "987654321012",                 // 9. Aadhaar Number
+        "",                             // 10. Profile Photo URL
+        "9876543210",                   // 11. Mobile Number
+        "9123456780",                   // 12. Alternate Mobile
+        "rahul.sharma@example.com",     // 13. Email Address - 1
+        "rahul.alt@example.com",        // 14. Email Address - 2
+        "Suresh Sharma",                // 15. Father Name
+        "Sunita Sharma",                // 16. Mother Name
+        "2026-2027",                    // 17. Academic Year
+        "MPC",                          // 18. Branch / Group
+        "1st Year",                     // 19. Intermediate Year
+        "2026-2028",                    // 20. Batch
+        "REGULAR",                      // 21. Admission Type
+        "DAY_SCHOLAR"                   // 22. Hostel / Day Scholar
+    };
+
+    private static final Set<String> SUPPORTED_NORMALIZED_HEADERS = Set.of(
+        "studentid", "admissionnumber", "fullname", "gender", "dateofbirth",
+        "nationality", "religion", "category", "aadhaarnumber", "profilephotourl",
+        "mobilenumber", "alternatemobile", "emailaddress1", "emailaddress2",
+        "fathername", "mothername", "academicyear", "branchgroup",
+        "intermediateyear", "batch", "admissiontype", "hosteldayscholar"
+    );
+
+    private static final Set<String> SUPPORTED_ALIASES = Set.of(
+        "mobile", "altmobile", "email1", "email2", "emailaddress", "email",
+        "dob", "caste", "photo", "photourl", "group", "branch", "year", "hostel"
+    );
+
     /**
-     * Generates a beautifully formatted student import template with instruction header,
-     * column headers, and a realistic sample row.
+     * Generates a formatted student import template with instruction header,
+     * column headers, and a sample row.
      */
     public static void generateTemplate(OutputStream outputStream) throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
@@ -133,7 +172,7 @@ public class StudentExcelImportHelper {
             Row titleRow = sheet.createRow(0);
             titleRow.setHeightInPoints(30);
             Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("BHASHYAM EDUCATIONAL INSTITUTION — STUDENT REGISTRATION IMPORT TEMPLATE");
+            titleCell.setCellValue("BHASHYAM IIT JEE ACADEMY — STUDENT REGISTRATION IMPORT TEMPLATE");
             titleCell.setCellStyle(titleStyle);
             sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, totalCols - 1));
 
@@ -141,7 +180,7 @@ public class StudentExcelImportHelper {
             Row noteRow = sheet.createRow(1);
             noteRow.setHeightInPoints(22);
             Cell noteCell = noteRow.createCell(0);
-            noteCell.setCellValue("INSTRUCTIONS: Columns with '*' are required. Date format: DD-MM-YYYY or YYYY-MM-DD. Roll numbers, mobile numbers & Aadhaar preserve leading zeros. Do not rename column headers.");
+            noteCell.setCellValue("INSTRUCTIONS: Columns with '*' are required. Date format: DD-MM-YYYY or YYYY-MM-DD. Aadhaar must be exactly 12 digits. Do not add, remove, or rename column headers.");
             noteCell.setCellStyle(noteStyle);
             sheet.addMergedRegion(new CellRangeAddress(1, 1, 0, totalCols - 1));
 
@@ -155,36 +194,12 @@ public class StudentExcelImportHelper {
                 cell.setCellStyle(headerName.contains("*") ? reqHeaderStyle : optHeaderStyle);
             }
 
-            // Row 3: Realistic Sample Row
+            // Row 3: Sample Row
             Row sampleRow = sheet.createRow(3);
             sampleRow.setHeightInPoints(22);
-            String[] sampleValues = {
-                // 1. Personal Details
-                "", "ADM2026001", "26INT101",
-                "Rahul", "Kumar", "Sharma", "Rahul Kumar Sharma",
-                "MALE", "15-06-2008", "O+",
-                "Indian", "Hindu", "General",
-                "987654321012", "ABCDE1234F", "Mole on right cheek", "", "ACTIVE",
-
-                // 2. Contact Details
-                "9876543210", "9123456780", "rahul.sharma@example.com",
-                "Plot 42, Nagarjuna Nagar", "Guntur", "Guntur", "Andhra Pradesh", "522001", "India",
-
-                // 3. Parent Details
-                "Suresh Sharma", "Sunita Sharma", "9876543211",
-                "suresh.sharma@example.com", "Business", "600000",
-                "Ramesh Sharma", "9876543212", "Uncle", "Guntur",
-
-                // 4. Academic Details
-                "2026-2027", "General", "MPC",
-                "1st Year", "1", "A",
-                "2026-2028", "10-06-2026", "REGULAR",
-                "DAY_SCHOLAR", "English", "CBSE", "UNIV-2026"
-            };
-
-            for (int col = 0; col < sampleValues.length && col < totalCols; col++) {
+            for (int col = 0; col < SAMPLE_VALUES.length && col < totalCols; col++) {
                 Cell cell = sampleRow.createCell(col);
-                cell.setCellValue(sampleValues[col]);
+                cell.setCellValue(SAMPLE_VALUES[col]);
                 cell.setCellStyle(sampleStyle);
             }
 
@@ -222,7 +237,7 @@ public class StudentExcelImportHelper {
                 return rows;
             }
 
-            // 1. Locate header row (search first 10 rows for "Roll Number" or "First Name")
+            // 1. Locate header row (search first 10 rows for "Full Name" or "Admission Number")
             int headerRowIdx = -1;
             Row headerRow = null;
             Map<String, Integer> colMap = new HashMap<>();
@@ -231,7 +246,7 @@ public class StudentExcelImportHelper {
                 Row row = sheet.getRow(r);
                 if (row == null) continue;
                 Map<String, Integer> tempMap = mapHeaders(row, dataFormatter);
-                if (tempMap.containsKey("rollnumber") || tempMap.containsKey("firstname")) {
+                if (tempMap.containsKey("fullname") || (tempMap.containsKey("admissionnumber") && tempMap.containsKey("gender"))) {
                     headerRowIdx = r;
                     headerRow = row;
                     colMap = tempMap;
@@ -240,17 +255,20 @@ public class StudentExcelImportHelper {
             }
 
             if (headerRow == null) {
-                headerErrorsOut.add("Could not find a valid student header row. Please use the official Student Import Template.");
+                headerErrorsOut.add("Could not find a valid student header row. Please use the official 22-column Student Registration Template.");
                 return rows;
             }
 
-            // Validate required columns presence
+            // 2. Validate that no unsupported or obsolete columns are present
+            validateSupportedHeaders(headerRow, dataFormatter, headerErrorsOut);
+
+            // 3. Validate required columns presence
             validateRequiredHeaders(colMap, headerErrorsOut);
             if (!headerErrorsOut.isEmpty()) {
                 return rows;
             }
 
-            // 2. Iterate data rows
+            // 4. Iterate data rows
             int lastRowNum = sheet.getLastRowNum();
             for (int r = headerRowIdx + 1; r <= lastRowNum; r++) {
                 Row row = sheet.getRow(r);
@@ -261,63 +279,40 @@ public class StudentExcelImportHelper {
                 StudentImportRowDto dto = new StudentImportRowDto();
                 dto.setRowNumber(r + 1); // 1-based row number
 
-                // Read Personal Details
+                // Read official 22 fields
                 dto.setStudentId(getString(row, colMap, "studentid", dataFormatter));
-                dto.setAdmissionNumber(getString(row, colMap, "admissionnumber", dataFormatter));
-                dto.setRollNumber(getString(row, colMap, "rollnumber", dataFormatter));
-                dto.setFirstName(getString(row, colMap, "firstname", dataFormatter));
-                dto.setMiddleName(getString(row, colMap, "middlename", dataFormatter));
-                dto.setLastName(getString(row, colMap, "lastname", dataFormatter));
-                dto.setFullName(getString(row, colMap, "fullname", dataFormatter));
+                dto.setAdmissionNumber(getString(row, colMap, "admissionnumber", dataFormatter, "admissionno", "admno"));
+                dto.setFullName(getString(row, colMap, "fullname", dataFormatter, "name", "studentname"));
                 dto.setGender(getString(row, colMap, "gender", dataFormatter));
-                dto.setDateOfBirth(getDate(row, colMap, "dateofbirth", dataFormatter));
-                dto.setBloodGroup(getString(row, colMap, "bloodgroup", dataFormatter));
+                dto.setDateOfBirth(getDate(row, colMap, "dateofbirth", dataFormatter, "dob"));
                 dto.setNationality(getStringOrDefault(row, colMap, "nationality", dataFormatter, "Indian"));
                 dto.setReligion(getString(row, colMap, "religion", dataFormatter));
-                dto.setCasteCategory(getString(row, colMap, "category", dataFormatter, "castecategory"));
+                dto.setCategory(getString(row, colMap, "category", dataFormatter, "caste"));
                 dto.setAadhaarNumber(getString(row, colMap, "aadhaarnumber", dataFormatter, "aadhaar"));
-                dto.setPanNumber(getString(row, colMap, "pannumber", dataFormatter, "pan"));
-                dto.setIdentificationMarks(getString(row, colMap, "identificationmarks", dataFormatter));
-                dto.setProfilePhotoUrl(getString(row, colMap, "profilephotourl", dataFormatter, "photo"));
-                dto.setStudentStatus(getStringOrDefault(row, colMap, "status", dataFormatter, "ACTIVE"));
-
-                // Read Contact Details
+                dto.setProfilePhotoUrl(getString(row, colMap, "profilephotourl", dataFormatter, "photo", "photourl"));
                 dto.setMobileNumber(getString(row, colMap, "mobilenumber", dataFormatter, "mobile"));
-                dto.setAlternateMobile(getString(row, colMap, "alternatemobile", dataFormatter));
-                dto.setEmail(getString(row, colMap, "emailaddress", dataFormatter, "email"));
-                dto.setAddress(getString(row, colMap, "address", dataFormatter, "residentialaddress"));
-                dto.setCity(getStringOrDefault(row, colMap, "city", dataFormatter, "Hyderabad"));
-                dto.setDistrict(getStringOrDefault(row, colMap, "district", dataFormatter, "Hyderabad"));
-                dto.setState(getStringOrDefault(row, colMap, "state", dataFormatter, "Telangana"));
-                dto.setPinCode(getStringOrDefault(row, colMap, "pincode", dataFormatter, "500001"));
-                dto.setCountry(getStringOrDefault(row, colMap, "country", dataFormatter, "India"));
-
-                // Read Parent & Guardian Details
-                dto.setFatherName(getString(row, colMap, "fathername", dataFormatter));
-                dto.setMotherName(getString(row, colMap, "mothername", dataFormatter));
-                dto.setParentMobile(getString(row, colMap, "parentmobile", dataFormatter));
-                dto.setParentEmail(getString(row, colMap, "parentemail", dataFormatter));
-                dto.setOccupation(getString(row, colMap, "occupation", dataFormatter));
-                dto.setAnnualIncome(getBigDecimal(row, colMap, "annualincome", dataFormatter));
-                dto.setGuardianName(getString(row, colMap, "guardianname", dataFormatter));
-                dto.setGuardianMobile(getString(row, colMap, "guardianmobile", dataFormatter));
-                dto.setGuardianRelation(getString(row, colMap, "guardianrelation", dataFormatter));
-                dto.setGuardianAddress(getString(row, colMap, "guardianaddress", dataFormatter));
-
-                // Read Academic Details
+                dto.setAlternateMobile(getString(row, colMap, "alternatemobile", dataFormatter, "altmobile"));
+                dto.setEmailAddress1(getString(row, colMap, "emailaddress1", dataFormatter, "email1", "emailaddress", "email"));
+                dto.setEmailAddress2(getString(row, colMap, "emailaddress2", dataFormatter, "email2"));
+                dto.setFatherName(getString(row, colMap, "fathername", dataFormatter, "father"));
+                dto.setMotherName(getString(row, colMap, "mothername", dataFormatter, "mother"));
                 dto.setAcademicYear(getString(row, colMap, "academicyear", dataFormatter));
-                dto.setDepartment(getStringOrDefault(row, colMap, "department", dataFormatter, "General"));
-                dto.setBranchGroup(getString(row, colMap, "branchgroup", dataFormatter, "group"));
+                dto.setBranchGroup(getString(row, colMap, "branchgroup", dataFormatter, "group", "branch"));
                 dto.setIntermediateYear(getString(row, colMap, "intermediateyear", dataFormatter, "year"));
-                dto.setSemester(getInteger(row, colMap, "semester", dataFormatter));
-                dto.setSection(getString(row, colMap, "section", dataFormatter));
                 dto.setBatch(getString(row, colMap, "batch", dataFormatter));
-                dto.setAdmissionDate(getDate(row, colMap, "admissiondate", dataFormatter));
                 dto.setAdmissionType(getStringOrDefault(row, colMap, "admissiontype", dataFormatter, "REGULAR"));
-                dto.setHostelDayScholar(getStringOrDefault(row, colMap, "hosteldayscholar", dataFormatter, "DAY_SCHOLAR"));
-                dto.setMedium(getStringOrDefault(row, colMap, "medium", dataFormatter, "English"));
-                dto.setRegulation(getString(row, colMap, "regulation", dataFormatter));
-                dto.setUniversityId(getString(row, colMap, "universityboardid", dataFormatter, "universityid"));
+                dto.setHostelDayScholar(getStringOrDefault(row, colMap, "hosteldayscholar", dataFormatter, "DAY_SCHOLAR", "hostel"));
+                String campusVal = getString(row, colMap, "campus", dataFormatter, "campusname", "location");
+                dto.setCampus(campusVal);
+
+                if (campusVal != null && !campusVal.isBlank()) {
+                    boolean isValidCampus = com.sicms.service.CampusService.OFFICIAL_CAMPUS_LIST.stream()
+                            .anyMatch(c -> c.equalsIgnoreCase(campusVal.trim()));
+                    if (!isValidCampus) {
+                        dto.getErrors().add("Invalid campus '" + campusVal.trim() + "'. Allowed campuses are the configured campus master values.");
+                        dto.setStatus("ERROR");
+                    }
+                }
 
                 rows.add(dto);
             }
@@ -375,13 +370,13 @@ public class StudentExcelImportHelper {
             errorStyle.setWrapText(true);
             setThinBorders(errorStyle);
 
-            String[] errHeaders = {"Row #", "Status", "Roll Number", "Student Name", "Group", "Year", "Section", "Errors / Reason"};
+            String[] errHeaders = {"Row #", "Status", "Student ID", "Admission Number", "Student Name", "Group", "Year", "Contact", "Errors / Reason"};
 
             // Row 0: Title Banner
             Row titleRow = sheet.createRow(0);
             titleRow.setHeightInPoints(28);
             Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("BHASHYAM EDUCATIONAL INSTITUTION — STUDENT IMPORT ERROR REPORT");
+            titleCell.setCellValue("BHASHYAM IIT JEE ACADEMY — STUDENT IMPORT ERROR REPORT");
             titleCell.setCellStyle(titleStyle);
             sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, errHeaders.length - 1));
 
@@ -404,11 +399,12 @@ public class StudentExcelImportHelper {
                     int col = 0;
                     createCell(row, col++, String.valueOf(dto.getRowNumber()), cellStyle);
                     createCell(row, col++, dto.getStatus(), cellStyle);
-                    createCell(row, col++, dto.getRollNumber(), cellStyle);
+                    createCell(row, col++, dto.getStudentId(), cellStyle);
+                    createCell(row, col++, dto.getAdmissionNumber(), cellStyle);
                     createCell(row, col++, dto.getFullName(), cellStyle);
                     createCell(row, col++, dto.getBranchGroup(), cellStyle);
                     createCell(row, col++, dto.getIntermediateYear(), cellStyle);
-                    createCell(row, col++, dto.getSection(), cellStyle);
+                    createCell(row, col++, dto.getMobileNumber(), cellStyle);
 
                     String allErrors = String.join("; ", dto.getErrors());
                     createCell(row, col++, allErrors, errorStyle);
@@ -443,25 +439,33 @@ public class StudentExcelImportHelper {
         return map;
     }
 
+    private static void validateSupportedHeaders(Row headerRow, DataFormatter formatter, List<String> errors) {
+        for (int c = 0; c < headerRow.getLastCellNum(); c++) {
+            Cell cell = headerRow.getCell(c);
+            if (cell == null) continue;
+            String rawText = formatter.formatCellValue(cell).trim();
+            if (rawText.isEmpty()) continue;
+            String normalized = rawText.toLowerCase().replaceAll("[^a-z0-9]", "");
+            if (!SUPPORTED_NORMALIZED_HEADERS.contains(normalized) && !SUPPORTED_ALIASES.contains(normalized)) {
+                errors.add("Unsupported or obsolete column detected: '" + rawText + "'. Please use the official 22-column Student Registration Template.");
+            }
+        }
+    }
+
     private static void validateRequiredHeaders(Map<String, Integer> colMap, List<String> errors) {
         String[][] requiredGroups = {
-            {"rollnumber", "Roll Number"},
-            {"firstname", "First Name"},
-            {"lastname", "Last Name"},
+            {"fullname", "Full Name"},
             {"gender", "Gender"},
             {"dateofbirth", "Date of Birth"},
             {"mobilenumber", "Mobile Number"},
-            {"emailaddress", "Email Address"},
-            {"address", "Address"},
+            {"emailaddress1", "Email Address - 1"},
+            {"emailaddress2", "Email Address - 2"},
             {"fathername", "Father Name"},
             {"mothername", "Mother Name"},
-            {"parentmobile", "Parent Mobile"},
+            {"academicyear", "Academic Year"},
             {"branchgroup", "Branch / Group"},
             {"intermediateyear", "Intermediate Year"},
-            {"section", "Section"},
             {"batch", "Batch"},
-            {"academicyear", "Academic Year"},
-            {"admissiondate", "Admission Date"},
             {"hosteldayscholar", "Hostel / Day Scholar"}
         };
 
@@ -470,12 +474,13 @@ public class StudentExcelImportHelper {
             String label = req[1];
             boolean found = colMap.containsKey(key);
             if (!found) {
-                // Secondary fallback keys
                 if ("mobilenumber".equals(key) && colMap.containsKey("mobile")) found = true;
-                else if ("emailaddress".equals(key) && colMap.containsKey("email")) found = true;
-                else if ("branchgroup".equals(key) && colMap.containsKey("group")) found = true;
+                else if ("emailaddress1".equals(key) && (colMap.containsKey("email1") || colMap.containsKey("emailaddress") || colMap.containsKey("email"))) found = true;
+                else if ("emailaddress2".equals(key) && colMap.containsKey("email2")) found = true;
+                else if ("dateofbirth".equals(key) && colMap.containsKey("dob")) found = true;
+                else if ("branchgroup".equals(key) && (colMap.containsKey("group") || colMap.containsKey("branch"))) found = true;
                 else if ("intermediateyear".equals(key) && colMap.containsKey("year")) found = true;
-                else if ("address".equals(key) && colMap.containsKey("residentialaddress")) found = true;
+                else if ("hosteldayscholar".equals(key) && colMap.containsKey("hostel")) found = true;
             }
             if (!found) {
                 errors.add("Missing required column: '" + label + "'");
@@ -494,6 +499,15 @@ public class StudentExcelImportHelper {
         if (colIdx == null) return null;
         Cell cell = row.getCell(colIdx);
         if (cell == null) return null;
+
+        // Prevent scientific notation on numeric cells (e.g. Aadhaar Number, Admission Number)
+        if (cell.getCellType() == CellType.NUMERIC && !DateUtil.isCellDateFormatted(cell)) {
+            double numericVal = cell.getNumericCellValue();
+            if (numericVal == Math.floor(numericVal) && !Double.isInfinite(numericVal)) {
+                return BigDecimal.valueOf(numericVal).toPlainString();
+            }
+        }
+
         String val = formatter.formatCellValue(cell).trim();
         return val.isEmpty() ? null : val;
     }
@@ -543,31 +557,6 @@ public class StudentExcelImportHelper {
         }
 
         return null;
-    }
-
-    private static BigDecimal getBigDecimal(Row row, Map<String, Integer> colMap, String key, DataFormatter formatter, String... fallbacks) {
-        String str = getString(row, colMap, key, formatter, fallbacks);
-        if (str == null || str.isBlank()) return null;
-        try {
-            // Strip any currency symbols or commas
-            String clean = str.replaceAll("[^0-9.]", "");
-            if (clean.isEmpty()) return null;
-            return new BigDecimal(clean);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private static Integer getInteger(Row row, Map<String, Integer> colMap, String key, DataFormatter formatter, String... fallbacks) {
-        String str = getString(row, colMap, key, formatter, fallbacks);
-        if (str == null || str.isBlank()) return null;
-        try {
-            String clean = str.replaceAll("[^0-9]", "");
-            if (clean.isEmpty()) return null;
-            return Integer.parseInt(clean);
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     private static boolean isRowBlank(Row row, DataFormatter formatter) {

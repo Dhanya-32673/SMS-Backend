@@ -7,8 +7,15 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
+import java.util.Set;
+import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import com.sicms.entity.User;
+import com.sicms.entity.DocumentType;
+import com.sicms.entity.ExportAuditLog;
+import com.sicms.entity.AcademicGroup;
+import com.sicms.repository.AcademicGroupRepository;
+import com.sicms.util.StudentExcelExporter;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -28,31 +35,27 @@ import com.sicms.dto.StudentResponse;
 import com.sicms.dto.StudentSearchResponse;
 import com.sicms.dto.StudentSummaryResponse;
 import com.sicms.dto.UpdateStudentRequest;
-import com.sicms.entity.DocumentType;
 import com.sicms.entity.Faculty;
 import com.sicms.entity.Student;
-import com.sicms.entity.StudentAcademicDetail;
-import com.sicms.entity.StudentContactDetail;
 import com.sicms.entity.StudentDocument;
-import com.sicms.entity.StudentParentDetail;
 import com.sicms.entity.StudentStatus;
 import com.sicms.exception.DuplicateResourceException;
 import com.sicms.exception.StudentNotFoundException;
 import com.sicms.repository.DocumentTypeRepository;
 import com.sicms.repository.StudentDocumentRepository;
-import com.sicms.entity.ExportAuditLog;
 import com.sicms.repository.ExportAuditLogRepository;
 import com.sicms.repository.StudentRepository;
 import com.sicms.repository.UserRepository;
 import com.sicms.repository.DocumentVersionRepository;
 import com.sicms.entity.DocumentVersion;
-import com.sicms.util.StudentExcelExporter;
 
 @Service
 public class StudentService {
 
     private final StudentRepository studentRepository;
     private final UserRepository userRepository;
+    private final com.sicms.repository.RoleRepository roleRepository;
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     private final StudentIdGeneratorService idGeneratorService;
     private final StudentQrService qrService;
     private final StudentDocumentRepository documentRepository;
@@ -62,11 +65,14 @@ public class StudentService {
     private final StudentPhotoService photoService;
     private final DocumentTypeRepository documentTypeRepository;
     private final ExportAuditLogRepository exportAuditLogRepository;
+    private final AcademicGroupRepository academicGroupRepository;
 
     @Autowired
     public StudentService(
             StudentRepository studentRepository,
             UserRepository userRepository,
+            com.sicms.repository.RoleRepository roleRepository,
+            org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
             StudentIdGeneratorService idGeneratorService,
             StudentQrService qrService,
             StudentDocumentRepository documentRepository,
@@ -75,10 +81,13 @@ public class StudentService {
             FacultyService facultyService,
             StudentPhotoService photoService,
             DocumentTypeRepository documentTypeRepository,
-            ExportAuditLogRepository exportAuditLogRepository
+            ExportAuditLogRepository exportAuditLogRepository,
+            AcademicGroupRepository academicGroupRepository
     ) {
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.passwordEncoder = passwordEncoder;
         this.idGeneratorService = idGeneratorService;
         this.qrService = qrService;
         this.documentRepository = documentRepository;
@@ -88,18 +97,92 @@ public class StudentService {
         this.photoService = photoService;
         this.documentTypeRepository = documentTypeRepository;
         this.exportAuditLogRepository = exportAuditLogRepository;
+        this.academicGroupRepository = academicGroupRepository;
+    }
+
+    public static String formatDobPassword(LocalDate dob) {
+        if (dob == null) return null;
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+        return dob.format(formatter);
+    }
+
+    public void createStudentUserAccount(Student student) {
+        if (student == null || student.getEmailAddress1() == null || student.getEmailAddress1().isBlank()) {
+            return;
+        }
+        String primaryEmail = student.getEmailAddress1().trim().toLowerCase();
+        com.sicms.entity.Role studentRole = roleRepository.findByRoleName("ROLE_STUDENT")
+                .orElseGet(() -> roleRepository.findByRoleName("STUDENT")
+                .orElseGet(() -> roleRepository.save(new com.sicms.entity.Role("ROLE_STUDENT", "Student User Role"))));
+
+        java.util.Optional<User> existingUserOpt = userRepository.findByEmailIgnoreCase(primaryEmail);
+        if (existingUserOpt.isPresent()) {
+            // User account already exists: preserve passwordHash and mustChangePassword!
+            User existingUser = existingUserOpt.get();
+            boolean updated = false;
+            if (existingUser.getStudent() == null) {
+                existingUser.setStudent(student);
+                updated = true;
+            }
+            if (student.getFullName() != null && !student.getFullName().isBlank() &&
+                    (existingUser.getFullName() == null || existingUser.getFullName().isBlank())) {
+                existingUser.setFullName(student.getFullName().trim());
+                updated = true;
+            }
+            if (updated) {
+                userRepository.save(existingUser);
+            }
+            return;
+        }
+
+        String defaultPassword = formatDobPassword(student.getDateOfBirth());
+        if (defaultPassword == null || defaultPassword.isBlank()) {
+            defaultPassword = "01-01-2000";
+        }
+
+        User studentUser = new User();
+        studentUser.setFullName(student.getFullName());
+        studentUser.setEmail(primaryEmail);
+        studentUser.setPasswordHash(passwordEncoder.encode(defaultPassword));
+        studentUser.setRole(studentRole);
+        studentUser.setAuthProvider(com.sicms.entity.AuthProvider.LOCAL);
+        studentUser.setEmailVerified(true);
+        studentUser.setAccountEnabled(true);
+        studentUser.setMustChangePassword(true);
+        studentUser.setStudent(student);
+
+        userRepository.save(studentUser);
     }
 
     @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
     @Transactional
     public StudentResponse createStudent(CreateStudentRequest request, String createdByEmail, boolean facultyScoped) {
-        if (request.getRollNumber() != null && studentRepository.existsByRollNumberIgnoreCase(request.getRollNumber().trim())) {
-            throw new DuplicateResourceException("Student with Roll Number '" + request.getRollNumber() + "' already exists.");
+        if (request.getEmailAddress1() == null || request.getEmailAddress1().isBlank()) {
+            throw new IllegalArgumentException("Primary email address is required to create the Student Portal account.");
+        }
+        String primaryEmail = request.getEmailAddress1().trim().toLowerCase();
+
+        if (request.getDateOfBirth() == null) {
+            throw new IllegalArgumentException("Date of birth is required to create the default password for the Student Portal account.");
+        }
+
+        if (userRepository.findByEmailIgnoreCase(primaryEmail).isPresent()) {
+            throw new DuplicateResourceException("This email address is already registered with another account.");
         }
 
         if (request.getAdmissionNumber() != null && !request.getAdmissionNumber().isBlank()
                 && studentRepository.existsByAdmissionNumberIgnoreCase(request.getAdmissionNumber().trim())) {
             throw new DuplicateResourceException("Student with Admission Number '" + request.getAdmissionNumber() + "' already exists.");
+        }
+
+        String studentId = request.getStudentId();
+        if (studentId != null && !studentId.isBlank()) {
+            if (studentRepository.existsByStudentId(studentId.trim())) {
+                throw new DuplicateResourceException("Student with ID '" + studentId + "' already exists.");
+            }
+            studentId = studentId.trim();
+        } else {
+            studentId = idGeneratorService.generateStudentId();
         }
 
         if (facultyScoped) {
@@ -108,79 +191,54 @@ public class StudentService {
         }
 
         Student student = new Student();
-        student.setStudentId(idGeneratorService.generateStudentId());
-        student.setRollNumber(request.getRollNumber().trim());
-        student.setAdmissionNumber(request.getAdmissionNumber());
-        student.setFirstName(request.getFirstName().trim());
-        student.setMiddleName(request.getMiddleName());
-        student.setLastName(request.getLastName().trim());
-        student.setFullName(request.getFullName());
+        student.setStudentId(studentId);
+        student.setAdmissionNumber(request.getAdmissionNumber() != null && !request.getAdmissionNumber().isBlank() ? request.getAdmissionNumber().trim() : null);
+        student.setFullName(request.getFullName().trim());
         student.setGender(request.getGender());
         student.setDateOfBirth(request.getDateOfBirth());
-        student.setBloodGroup(request.getBloodGroup());
-        student.setNationality(request.getNationality());
+        student.setNationality(request.getNationality() != null ? request.getNationality() : "Indian");
         student.setReligion(request.getReligion());
-        student.setCasteCategory(request.getCasteCategory());
+        student.setCategory(request.getCategory());
         student.setAadhaarNumber(request.getAadhaarNumber());
-        student.setPanNumber(request.getPanNumber());
-        student.setIdentificationMarks(request.getIdentificationMarks());
         student.setProfilePhotoUrl(request.getProfilePhotoUrl());
+        student.setMobileNumber(request.getMobileNumber());
+        student.setAlternateMobile(request.getAlternateMobile());
+        student.setEmailAddress1(primaryEmail);
+        student.setEmailAddress2(request.getEmailAddress2() != null ? request.getEmailAddress2().trim() : null);
+        student.setFatherName(request.getFatherName() != null ? request.getFatherName().trim() : null);
+        student.setMotherName(request.getMotherName() != null ? request.getMotherName().trim() : null);
+        student.setAcademicYear(request.getAcademicYear() != null ? request.getAcademicYear().trim() : null);
+        student.setBranchGroup(request.getBranchGroup() != null ? request.getBranchGroup().trim() : null);
+        student.setIntermediateYear(request.getIntermediateYear() != null ? request.getIntermediateYear().trim() : null);
+        student.setBatch(request.getBatch() != null ? request.getBatch().trim() : null);
+        student.setAdmissionType(request.getAdmissionType() != null ? request.getAdmissionType() : "REGULAR");
+        student.setHostelDayScholar(request.getHostelDayScholar() != null ? request.getHostelDayScholar() : "DAY_SCHOLAR");
+        if (request.getCampus() != null) {
+            student.setCampus(request.getCampus().trim());
+        }
+
+        student.setSection(request.getSection() != null && !request.getSection().isBlank() ? request.getSection().trim() : "Unassigned");
         student.setStatus(request.getStatus() != null ? request.getStatus() : StudentStatus.ACTIVE);
 
         if (createdByEmail != null) {
             userRepository.findByEmailIgnoreCase(createdByEmail).ifPresent(student::setCreatedBy);
         }
 
-        // 1:1 Contact Detail
-        StudentContactDetail contactDetail = new StudentContactDetail();
-        contactDetail.setMobileNumber(request.getMobileNumber());
-        contactDetail.setAlternateMobile(request.getAlternateMobile());
-        contactDetail.setEmail(request.getEmail());
-        contactDetail.setAddress(request.getAddress());
-        contactDetail.setCity(request.getCity());
-        contactDetail.setDistrict(request.getDistrict());
-        contactDetail.setState(request.getState());
-        contactDetail.setPinCode(request.getPinCode());
-        contactDetail.setCountry(request.getCountry());
-        student.setContactDetail(contactDetail);
-
-        // 1:1 Parent Detail
-        StudentParentDetail parentDetail = new StudentParentDetail();
-        parentDetail.setFatherName(request.getFatherName());
-        parentDetail.setMotherName(request.getMotherName());
-        parentDetail.setParentMobile(request.getParentMobile());
-        parentDetail.setParentEmail(request.getParentEmail());
-        parentDetail.setOccupation(request.getOccupation());
-        parentDetail.setAnnualIncome(request.getAnnualIncome());
-        student.setParentDetail(parentDetail);
-
-        // 1:1 Academic Detail
-        StudentAcademicDetail academicDetail = new StudentAcademicDetail();
-        academicDetail.setUniversityId(request.getUniversityId());
-        academicDetail.setDepartment(request.getDepartment());
-        academicDetail.setBranchGroup(request.getBranchGroup());
-        academicDetail.setIntermediateYear(request.getIntermediateYear());
-        academicDetail.setSemester(request.getSemester());
-        academicDetail.setSection(request.getSection());
-        academicDetail.setBatch(request.getBatch());
-        academicDetail.setAcademicYear(request.getAcademicYear());
-        academicDetail.setAdmissionDate(request.getAdmissionDate());
-        academicDetail.setRegulation(request.getRegulation());
-        academicDetail.setAdmissionType(request.getAdmissionType());
-        academicDetail.setHostelDayScholar(request.getHostelDayScholar());
-        academicDetail.setMedium(request.getMedium());
-        student.setAcademicDetail(academicDetail);
-
         Student saved = studentRepository.save(student);
+
+        // Automatically Create Student Portal User Account
+        createStudentUserAccount(saved);
+
         return new StudentResponse(saved);
     }
 
-        @Transactional(readOnly = true)
+    @Transactional(readOnly = true)
     public PaginatedStudentResponse<StudentSummaryResponse> getStudents(
             int page,
             int size,
             String sortBy,
             String sortDir,
+            String campus,
             String department,
             String academicYear,
             Integer currentYear,
@@ -203,7 +261,7 @@ public class StudentService {
             );
         } else {
             studentPage = studentRepository.filterAndSearchStudents(
-                department, academicYear, currentYear, section, status, search, pageable
+                campus, department, academicYear, currentYear, section, status, search, pageable
             );
         }
 
@@ -221,10 +279,102 @@ public class StudentService {
         );
     }
 
-        @Transactional(readOnly = true)
+    @Transactional(readOnly = true)
+    public List<String> getDistinctGroups() {
+        Set<String> uniqueGroups = new LinkedHashSet<>();
+        try {
+            List<String> rawGroups = studentRepository.findDistinctBranchGroups();
+            if (rawGroups != null) {
+                for (String g : rawGroups) {
+                    if (g != null && !g.trim().isBlank()) {
+                        uniqueGroups.add(g.trim().toUpperCase());
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            List<AcademicGroup> agList = academicGroupRepository.findAll();
+            if (agList != null) {
+                for (AcademicGroup ag : agList) {
+                    if (ag.getCode() != null && !ag.getCode().trim().isBlank()) {
+                        uniqueGroups.add(ag.getCode().trim().toUpperCase());
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        return new ArrayList<>(uniqueGroups);
+    }
+
+    @Transactional(readOnly = true)
     public StudentResponse getStudentByPublicId(String studentId, String currentUserEmail, boolean facultyScoped) {
         Student student = loadStudentForCurrentUser(studentId, currentUserEmail, facultyScoped)
                 .orElseThrow(() -> new StudentNotFoundException("Student with ID '" + studentId + "' not found."));
+        return new StudentResponse(student);
+    }
+
+    @Transactional
+    public Student getStudentEntityByEmailOrUserId(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            throw new StudentNotFoundException("Student email or user identifier is required.");
+        }
+        String cleanId = identifier.trim();
+
+        // 1. Try to find User by email/identifier first
+        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(cleanId);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            if (user.getStudent() != null) {
+                return user.getStudent();
+            }
+        }
+
+        // 2. Extract prefix if identifier is a composite email (e.g. STU2026001001@student.bhashyam.edu or STU2026001001)
+        String prefix = cleanId;
+        if (cleanId.contains("@")) {
+            prefix = cleanId.substring(0, cleanId.indexOf("@")).trim();
+        }
+
+        // 3. Search Student repository by email, studentId (or extracted prefix), or admissionNumber
+        Optional<Student> studentOpt = studentRepository.findByEmailOrStudentId(cleanId);
+        if (studentOpt.isEmpty()) {
+            studentOpt = studentRepository.findByEmailOrStudentId(prefix);
+        }
+        if (studentOpt.isEmpty()) {
+            studentOpt = studentRepository.findByStudentIdIgnoreCase(prefix);
+        }
+        if (studentOpt.isEmpty()) {
+            studentOpt = studentRepository.findByAdmissionNumberIgnoreCase(prefix);
+        }
+
+        Student student = studentOpt.orElseThrow(() ->
+                new StudentNotFoundException("No student record linked to account '" + identifier + "'."));
+
+        // 4. Auto-link Student to User in DB if missing so future lookups are instant
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            if (user.getStudent() == null) {
+                user.setStudent(student);
+                userRepository.save(user);
+            }
+        } else if (student.getEmailAddress1() != null && !student.getEmailAddress1().isBlank()) {
+            userRepository.findByEmailIgnoreCase(student.getEmailAddress1().trim()).ifPresent(u -> {
+                if (u.getStudent() == null) {
+                    u.setStudent(student);
+                    userRepository.save(u);
+                }
+            });
+        }
+
+        return student;
+    }
+
+    @Transactional
+    public StudentResponse getStudentByEmailOrUserId(String identifier) {
+        Student student = getStudentEntityByEmailOrUserId(identifier);
         return new StudentResponse(student);
     }
 
@@ -234,14 +384,6 @@ public class StudentService {
         Student student = loadStudentForCurrentUser(studentId, currentUserEmail, facultyScoped)
                 .orElseThrow(() -> new StudentNotFoundException("Student with ID '" + studentId + "' not found."));
 
-        // Roll Number & Admission Number uniqueness check if updated
-        if (request.getRollNumber() != null && !request.getRollNumber().trim().equalsIgnoreCase(student.getRollNumber())) {
-            if (studentRepository.existsByRollNumberIgnoreCase(request.getRollNumber().trim())) {
-                throw new DuplicateResourceException("Student with Roll Number '" + request.getRollNumber() + "' already exists.");
-            }
-            student.setRollNumber(request.getRollNumber().trim());
-        }
-
         if (request.getAdmissionNumber() != null && !request.getAdmissionNumber().isBlank()
                 && !request.getAdmissionNumber().trim().equalsIgnoreCase(student.getAdmissionNumber())) {
             if (studentRepository.existsByAdmissionNumberIgnoreCase(request.getAdmissionNumber().trim())) {
@@ -250,41 +392,37 @@ public class StudentService {
             student.setAdmissionNumber(request.getAdmissionNumber().trim());
         }
 
-        // Faculty Scope check if academic details change
         if (facultyScoped && (request.getBranchGroup() != null || request.getIntermediateYear() != null || request.getSection() != null || request.getAcademicYear() != null)) {
             Faculty faculty = facultyService.getFacultyByUserEmail(currentUserEmail);
-            String g = request.getBranchGroup() != null ? request.getBranchGroup() : (student.getAcademicDetail() != null ? student.getAcademicDetail().getBranchGroup() : "");
-            String y = request.getIntermediateYear() != null ? request.getIntermediateYear() : (student.getAcademicDetail() != null ? student.getAcademicDetail().getIntermediateYear() : "");
-            String s = request.getSection() != null ? request.getSection() : (student.getAcademicDetail() != null ? student.getAcademicDetail().getSection() : "");
-            String ay = request.getAcademicYear() != null ? request.getAcademicYear() : (student.getAcademicDetail() != null ? student.getAcademicDetail().getAcademicYear() : "");
+            String g = request.getBranchGroup() != null ? request.getBranchGroup() : student.getBranchGroup();
+            String y = request.getIntermediateYear() != null ? request.getIntermediateYear() : student.getIntermediateYear();
+            String s = request.getSection() != null ? request.getSection() : student.getSection();
+            String ay = request.getAcademicYear() != null ? request.getAcademicYear() : student.getAcademicYear();
             enforceFacultyAcademicScope(faculty, g, y, s, ay);
         }
 
-        // Personal Information
-        if (request.getFirstName() != null) student.setFirstName(request.getFirstName().trim());
-        if (request.getMiddleName() != null) student.setMiddleName(request.getMiddleName().trim());
-        if (request.getLastName() != null) student.setLastName(request.getLastName().trim());
-
-        String fn = student.getFirstName() != null ? student.getFirstName().trim() : "";
-        String mn = student.getMiddleName() != null && !student.getMiddleName().isBlank() ? student.getMiddleName().trim() + " " : "";
-        String ln = student.getLastName() != null ? student.getLastName().trim() : "";
-        String calculatedFullName = (fn + " " + mn + ln).trim();
-
-        if (request.getFullName() != null && !request.getFullName().isBlank() && !request.getFullName().trim().equalsIgnoreCase(calculatedFullName)) {
-            student.setFullName(request.getFullName().trim());
-        } else {
-            student.setFullName(calculatedFullName);
-        }
-
+        if (request.getFullName() != null && !request.getFullName().isBlank()) student.setFullName(request.getFullName().trim());
         if (request.getGender() != null) student.setGender(request.getGender());
         if (request.getDateOfBirth() != null) student.setDateOfBirth(request.getDateOfBirth());
-        if (request.getBloodGroup() != null) student.setBloodGroup(request.getBloodGroup());
         if (request.getNationality() != null) student.setNationality(request.getNationality());
         if (request.getReligion() != null) student.setReligion(request.getReligion());
-        if (request.getCasteCategory() != null) student.setCasteCategory(request.getCasteCategory());
+        if (request.getCategory() != null) student.setCategory(request.getCategory());
         if (request.getAadhaarNumber() != null) student.setAadhaarNumber(request.getAadhaarNumber());
-        if (request.getPanNumber() != null) student.setPanNumber(request.getPanNumber());
-        if (request.getIdentificationMarks() != null) student.setIdentificationMarks(request.getIdentificationMarks());
+        if (request.getMobileNumber() != null) student.setMobileNumber(request.getMobileNumber());
+        if (request.getAlternateMobile() != null) student.setAlternateMobile(request.getAlternateMobile());
+        if (request.getEmailAddress1() != null) student.setEmailAddress1(request.getEmailAddress1().trim());
+        if (request.getEmailAddress2() != null) student.setEmailAddress2(request.getEmailAddress2().trim());
+        if (request.getFatherName() != null) student.setFatherName(request.getFatherName().trim());
+        if (request.getMotherName() != null) student.setMotherName(request.getMotherName().trim());
+        if (request.getAcademicYear() != null) student.setAcademicYear(request.getAcademicYear().trim());
+        if (request.getBranchGroup() != null) student.setBranchGroup(request.getBranchGroup().trim());
+        if (request.getIntermediateYear() != null) student.setIntermediateYear(request.getIntermediateYear().trim());
+        if (request.getBatch() != null) student.setBatch(request.getBatch().trim());
+        if (request.getAdmissionType() != null) student.setAdmissionType(request.getAdmissionType());
+        if (request.getHostelDayScholar() != null) student.setHostelDayScholar(request.getHostelDayScholar());
+        if (request.getSection() != null) student.setSection(request.getSection().trim());
+        if (request.getStatus() != null) student.setStatus(request.getStatus());
+
         if (request.getProfilePhotoUrl() != null) {
             String newPhoto = request.getProfilePhotoUrl().trim();
             String oldPhoto = student.getProfilePhotoUrl();
@@ -304,70 +442,10 @@ public class StudentService {
                 }
             }
         }
-        if (request.getStatus() != null) student.setStatus(request.getStatus());
-
-        // Contact Detail
-        StudentContactDetail contact = student.getContactDetail();
-        if (contact == null) {
-            contact = new StudentContactDetail();
-            contact.setStudent(student);
-            student.setContactDetail(contact);
-        }
-        if (request.getMobileNumber() != null) contact.setMobileNumber(request.getMobileNumber());
-        if (request.getAlternateMobile() != null) contact.setAlternateMobile(request.getAlternateMobile());
-        if (request.getEmail() != null) contact.setEmail(request.getEmail());
-        if (request.getAddress() != null) contact.setAddress(request.getAddress());
-        if (request.getCity() != null) contact.setCity(request.getCity());
-        if (request.getDistrict() != null) contact.setDistrict(request.getDistrict());
-        if (request.getState() != null) contact.setState(request.getState());
-        if (request.getPinCode() != null) contact.setPinCode(request.getPinCode());
-        if (request.getCountry() != null) contact.setCountry(request.getCountry());
-
-        // Parent Detail
-        StudentParentDetail parent = student.getParentDetail();
-        if (parent == null) {
-            parent = new StudentParentDetail();
-            parent.setStudent(student);
-            student.setParentDetail(parent);
-        }
-        if (request.getFatherName() != null) parent.setFatherName(request.getFatherName());
-        if (request.getMotherName() != null) parent.setMotherName(request.getMotherName());
-        if (request.getParentMobile() != null) parent.setParentMobile(request.getParentMobile());
-        if (request.getParentEmail() != null) parent.setParentEmail(request.getParentEmail());
-        if (request.getOccupation() != null) parent.setOccupation(request.getOccupation());
-        if (request.getAnnualIncome() != null) parent.setAnnualIncome(request.getAnnualIncome());
-
-        // Academic Detail
-        StudentAcademicDetail academic = student.getAcademicDetail();
-        if (academic == null) {
-            academic = new StudentAcademicDetail();
-            academic.setStudent(student);
-            student.setAcademicDetail(academic);
-        }
-        if (request.getUniversityId() != null) academic.setUniversityId(request.getUniversityId());
-        if (request.getDepartment() != null) academic.setDepartment(request.getDepartment());
-        if (request.getBranchGroup() != null) academic.setBranchGroup(request.getBranchGroup());
-        if (request.getIntermediateYear() != null) academic.setIntermediateYear(request.getIntermediateYear());
-        if (request.getSemester() != null) academic.setSemester(request.getSemester());
-        if (request.getSection() != null) {
-            String cleanSec = request.getSection().trim();
-            if (cleanSec.toLowerCase().startsWith("section ")) {
-                cleanSec = cleanSec.substring(8).trim();
-            }
-            academic.setSection(cleanSec);
-        }
-        if (request.getBatch() != null) academic.setBatch(request.getBatch());
-        if (request.getAcademicYear() != null) academic.setAcademicYear(request.getAcademicYear());
-        if (request.getAdmissionDate() != null) academic.setAdmissionDate(request.getAdmissionDate());
-        if (request.getRegulation() != null) academic.setRegulation(request.getRegulation());
-        if (request.getAdmissionType() != null) academic.setAdmissionType(request.getAdmissionType());
-        if (request.getHostelDayScholar() != null) academic.setHostelDayScholar(request.getHostelDayScholar());
-        if (request.getMedium() != null) academic.setMedium(request.getMedium());
 
         Student saved = studentRepository.save(student);
         return new StudentResponse(saved);
     }
-
 
     @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
     @Transactional
@@ -427,24 +505,32 @@ public class StudentService {
 
     @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
     @Transactional
-    public void deleteStudent(String studentId) {
+    public boolean deleteStudent(String studentId) {
         if (studentId == null || studentId.isBlank()) {
-            throw new IllegalArgumentException("Student ID cannot be null or empty.");
+            return false;
         }
 
-        Student student = studentRepository.findByStudentId(studentId.trim()).orElse(null);
+        String clean = studentId.trim();
+        Student student = studentRepository.findByStudentId(clean).orElse(null);
+        if (student == null) {
+            student = studentRepository.findByStudentIdIgnoreCase(clean).orElse(null);
+        }
         if (student == null) {
             try {
-                student = studentRepository.findById(Long.parseLong(studentId.trim())).orElse(null);
+                student = studentRepository.findById(Long.parseLong(clean)).orElse(null);
             } catch (NumberFormatException ignored) {}
+        }
+        if (student == null) {
+            student = studentRepository.findByAdmissionNumberIgnoreCase(clean).orElse(null);
         }
 
         if (student == null) {
-            System.out.println(">>> STUDENT ALREADY PURGED OR NOT FOUND: " + studentId);
-            return;
+            System.out.println(">>> [DELETE STUDENT] Student record not found for query: " + studentId);
+            return false;
         }
 
         String actualStudentId = student.getStudentId();
+        System.out.println(">>> [DELETE STUDENT] Deleting student record: " + actualStudentId + " (DB ID: " + student.getId() + ")");
 
         // 1. Delete all student documents and versions safely
         List<StudentDocument> documents = documentRepository.findByStudent_StudentId(actualStudentId);
@@ -480,21 +566,61 @@ public class StudentService {
             } catch (Exception ignored) {}
         }
 
-        // 3. Delete student database record
-        studentRepository.delete(student);
+        // 3. Unlink and disable any linked user accounts to prevent foreign key constraint violations
+        try {
+            List<User> linkedUsers = userRepository.findByStudent(student);
+            for (User u : linkedUsers) {
+                u.setStudent(null);
+                u.setAccountEnabled(false);
+                userRepository.save(u);
+            }
+        } catch (Exception ignored) {}
 
-        // 4. Safely disable linked user account if present without breaking transaction
-        if (student.getContactDetail() != null && student.getContactDetail().getEmail() != null) {
-            String email = student.getContactDetail().getEmail();
+        if (student.getEmailAddress1() != null) {
+            String email = student.getEmailAddress1();
             try {
                 userRepository.findByEmailIgnoreCase(email).ifPresent(user -> {
+                    user.setStudent(null);
                     user.setAccountEnabled(false);
                     userRepository.save(user);
                 });
             } catch (Exception ignored) {}
         }
 
-        System.out.println(">>> STUDENT PURGED SUCCESSFULLY: " + actualStudentId + " (id=" + student.getId() + ")");
+        // 4. Delete student database record
+        studentRepository.delete(student);
+
+        System.out.println(">>> [DELETE STUDENT] Successfully deleted student: " + actualStudentId);
+        return true;
+    }
+
+    @CacheEvict(value = {"adminDashboard", "facultyDashboard", "studentProfile", "students", "studentSummaries"}, allEntries = true)
+    @Transactional
+    public int deleteStudentsBulk(List<String> studentIds) {
+        if (studentIds == null || studentIds.isEmpty()) {
+            return 0;
+        }
+
+        List<String> cleanIds = studentIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
+
+        if (cleanIds.isEmpty()) {
+            return 0;
+        }
+
+        System.out.println(">>> [BULK DELETE SERVICE] Processing " + cleanIds.size() + " student IDs: " + cleanIds);
+        int deletedCount = 0;
+        for (String id : cleanIds) {
+            boolean success = deleteStudent(id);
+            if (success) {
+                deletedCount++;
+            }
+        }
+        System.out.println(">>> [BULK DELETE SERVICE] Successfully deleted " + deletedCount + " out of " + cleanIds.size() + " students.");
+        return deletedCount;
     }
 
     public Optional<Student> loadStudentForCurrentUser(String studentId, String currentUserEmail, boolean facultyScoped) {
@@ -508,9 +634,6 @@ public class StudentService {
                 Long idNum = Long.parseLong(clean);
                 student = studentRepository.findById(idNum).orElse(null);
             } catch (NumberFormatException ignored) {}
-        }
-        if (student == null) {
-            student = studentRepository.findByRollNumberIgnoreCase(clean).orElse(null);
         }
         if (student == null) {
             student = studentRepository.findByAdmissionNumberIgnoreCase(clean).orElse(null);
@@ -548,63 +671,46 @@ public class StudentService {
         }
 
         List<String> sectionNames = facultyService.getFacultyAssignedSectionFormattedNames(faculty.getId());
-        if (sectionNames == null || sectionNames.isEmpty()) {
-            return "Assigned_Students.xlsx";
+        if (sectionNames.isEmpty()) {
+            return "Assigned_Students_" + today + ".xlsx";
         }
 
-        String rawName = String.join("_", sectionNames) + "_Students.xlsx";
-        return rawName.replaceAll("[^a-zA-Z0-9_.-]", "_");
+        String sanitized = String.join("_", sectionNames).replaceAll("[^a-zA-Z0-9_-]", "_");
+        return "Students_" + sanitized + "_" + today + ".xlsx";
     }
 
-    /**
-     * Export permitted students directly to output stream as Excel (.xlsx) with Audit Logging.
-     */
-    @Transactional
-    public void exportStudentsToExcel(OutputStream outputStream, String currentUserEmail, boolean isFaculty, String ipAddress) throws IOException {
+    @Transactional(readOnly = true)
+    public void exportStudentsToExcel(OutputStream outputStream, String currentUserEmail, boolean isFaculty, String clientIp) throws IOException {
         List<Student> students;
-        String sectionNamesStr = "ALL";
-        Long userId = null;
-        String role = isFaculty ? "ROLE_FACULTY" : "ROLE_ADMIN";
-
-        User currentUser = currentUserEmail != null ? userRepository.findByEmailIgnoreCase(currentUserEmail).orElse(null) : null;
-        if (currentUser != null) {
-            userId = currentUser.getId();
-            if (currentUser.getRole() != null && currentUser.getRole().getRoleName() != null) {
-                role = currentUser.getRole().getRoleName();
+        if (!isFaculty) {
+            students = studentRepository.findAllForExcelExport();
+        } else {
+            Faculty faculty = facultyService.findFacultyByUserEmail(currentUserEmail).orElse(null);
+            if (faculty != null) {
+                User user = userRepository.findByEmailIgnoreCase(currentUserEmail).orElse(null);
+                Long userId = user != null ? user.getId() : -1L;
+                students = studentRepository.findAccessibleStudentsForFacultyExport(faculty.getId(), userId);
+            } else {
+                students = List.of();
             }
         }
 
-        if (isFaculty) {
-            Faculty faculty = facultyService.getFacultyByUserEmail(currentUserEmail);
-            Long facultyUserId = currentUser != null ? currentUser.getId() : -1L;
-            students = studentRepository.findAccessibleStudentsForFacultyExport(faculty.getId(), facultyUserId);
-            List<String> assignedSections = facultyService.getFacultyAssignedSectionFormattedNames(faculty.getId());
-            sectionNamesStr = (assignedSections != null && !assignedSections.isEmpty()) ? String.join(", ", assignedSections) : "Self-Created";
-        } else {
-            students = studentRepository.findAllForExcelExport();
-        }
-
-        List<StudentDocument> allDocs = documentRepository.findAllWithStudentAndType();
-        Map<String, List<StudentDocument>> studentDocsMap = allDocs.stream()
-                .filter(d -> d.getStudent() != null && d.getStudent().getStudentId() != null)
-                .collect(Collectors.groupingBy(d -> d.getStudent().getStudentId()));
         List<DocumentType> requiredTypes = documentTypeRepository.findByActiveTrue();
+        Map<String, List<StudentDocument>> docsMap = Map.of();
 
-        StudentExcelExporter.exportToStream(students, studentDocsMap, requiredTypes, outputStream);
+        StudentExcelExporter.exportToStream(students, docsMap, requiredTypes, outputStream);
 
-        // Audit Logging
         try {
-            ExportAuditLog auditLog = new ExportAuditLog(
-                    userId,
-                    currentUserEmail,
-                    role,
-                    sectionNamesStr,
-                    students.size(),
-                    ipAddress
+            User user = currentUserEmail != null ? userRepository.findByEmailIgnoreCase(currentUserEmail).orElse(null) : null;
+            ExportAuditLog log = new ExportAuditLog(
+                user != null ? user.getId() : null,
+                currentUserEmail,
+                isFaculty ? "ROLE_FACULTY" : "ROLE_ADMIN",
+                "EXPORT_EXCEL",
+                students.size(),
+                clientIp != null ? clientIp : "UNKNOWN"
             );
-            exportAuditLogRepository.save(auditLog);
-        } catch (Exception e) {
-            System.err.println("Failed to save export audit log: " + e.getMessage());
-        }
+            exportAuditLogRepository.save(log);
+        } catch (Exception ignored) {}
     }
 }

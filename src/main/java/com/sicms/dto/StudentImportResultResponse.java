@@ -13,6 +13,7 @@ public class StudentImportResultResponse {
     private String message;
     private List<StudentImportRowDto> failedRows = new ArrayList<>();
 
+    private String targetCampus;
     private String targetGroup;
     private String targetYear;
     private String targetSection;
@@ -42,6 +43,9 @@ public class StudentImportResultResponse {
 
     public List<StudentImportRowDto> getFailedRows() { return failedRows; }
     public void setFailedRows(List<StudentImportRowDto> failedRows) { this.failedRows = failedRows; }
+
+    public String getTargetCampus() { return targetCampus; }
+    public void setTargetCampus(String targetCampus) { this.targetCampus = targetCampus; }
 
     public String getTargetGroup() { return targetGroup; }
     public void setTargetGroup(String targetGroup) { this.targetGroup = targetGroup; }

@@ -24,4 +24,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmailIgnoreCase(String email);
 
     long countByRoleRoleName(String roleName);
+
+    java.util.List<User> findByStudent(com.sicms.entity.Student student);
 }

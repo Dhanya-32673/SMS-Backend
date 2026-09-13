@@ -50,12 +50,15 @@ public class DocumentController {
 
     private final DocumentService documentService;
     private final DocumentStorageService storageService;
+    private final com.sicms.service.StudentService studentService;
 
     @Autowired
     public DocumentController(DocumentService documentService,
-                              DocumentStorageService storageService) {
+                              DocumentStorageService storageService,
+                              com.sicms.service.StudentService studentService) {
         this.documentService = documentService;
         this.storageService = storageService;
+        this.studentService = studentService;
     }
 
     /**
@@ -273,21 +276,71 @@ public class DocumentController {
     }
 
     /**
+     * AUTHENTICATED STUDENT: Get currently logged-in student's own documents/certificates
+     */
+    @GetMapping({"/me", "/student/me"})
+    @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY', 'STUDENT') or hasAnyAuthority('ROLE_ADMIN', 'ROLE_FACULTY', 'ROLE_STUDENT', 'ADMIN', 'FACULTY', 'STUDENT')")
+    public ResponseEntity<List<DocumentResponse>> getCurrentStudentDocuments(
+            @AuthenticationPrincipal Object principal,
+            java.security.Principal fallbackPrincipal) {
+        String identifier = null;
+        if (principal instanceof com.sicms.security.CustomUserDetails cud) {
+            identifier = cud.getEmail();
+        } else if (principal instanceof UserDetails ud) {
+            identifier = ud.getUsername();
+        } else if (principal instanceof String str) {
+            identifier = str;
+        } else if (fallbackPrincipal != null) {
+            identifier = fallbackPrincipal.getName();
+        }
+
+        if (identifier == null || identifier.isBlank() || "anonymousUser".equalsIgnoreCase(identifier)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        List<DocumentResponse> list = documentService.getDocumentsForCurrentStudent(identifier);
+        return ResponseEntity.ok(list);
+    }
+
+    /**
      * Serve document file bytes for preview and download.
      * GET /api/documents/{id}/file?download=true (optional param for attachment)
      */
     @GetMapping("/{id}/file")
-    @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY', 'STUDENT') or hasAnyAuthority('ROLE_ADMIN', 'ROLE_FACULTY', 'ROLE_STUDENT', 'ADMIN', 'FACULTY', 'STUDENT')")
     public ResponseEntity<?> serveDocumentFile(
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestParam(value = "download", defaultValue = "false") boolean download) {
 
-        StudentDocument doc = documentService.getDocumentEntityById(id, userDetails != null ? userDetails.getUsername() : null, isFaculty(userDetails));
+        if (userDetails == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        StudentDocument doc = documentService.getDocumentEntityById(id, userDetails.getUsername(), isFaculty(userDetails));
         if (doc == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body("{\"error\":\"DOCUMENT_NOT_FOUND\",\"message\":\"Document record not found in system.\"}");
+        }
+
+        boolean isStudentRole = isStudent(userDetails);
+        if (isStudentRole) {
+            String studentIdOfDoc = doc.getStudent() != null ? doc.getStudent().getStudentId() : "";
+            String emailOfDoc = doc.getStudent() != null ? doc.getStudent().getEmailAddress1() : "";
+            String loggedInUser = userDetails.getUsername();
+            boolean isOwner = (studentIdOfDoc != null && studentIdOfDoc.equalsIgnoreCase(loggedInUser)) ||
+                              (emailOfDoc != null && emailOfDoc.equalsIgnoreCase(loggedInUser));
+            if (!isOwner) {
+                com.sicms.dto.StudentResponse me = null;
+                try {
+                    me = studentService.getStudentByEmailOrUserId(loggedInUser);
+                } catch (Exception ignored) {}
+                if (me == null || !me.getStudentId().equalsIgnoreCase(studentIdOfDoc)) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body("{\"error\":\"ACCESS_DENIED\",\"message\":\"You do not have authorization to view this certificate.\"}");
+                }
+            }
         }
 
         if (!storageService.fileExists(doc.getStoragePath())) {
@@ -305,7 +358,6 @@ public class DocumentController {
         if (download) {
             headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"");
         } else {
-            // inline so browser can preview PDF or image in iframe/img
             headers.set(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"");
         }
         headers.setContentLength(fileBytes.length);
@@ -315,5 +367,11 @@ public class DocumentController {
 
     private boolean isFaculty(UserDetails userDetails) {
         return userDetails != null && userDetails.getAuthorities().stream().anyMatch(authority -> "ROLE_FACULTY".equalsIgnoreCase(authority.getAuthority()));
+    }
+
+    private boolean isStudent(UserDetails userDetails) {
+        return userDetails != null && userDetails.getAuthorities().stream().anyMatch(authority ->
+            "ROLE_STUDENT".equalsIgnoreCase(authority.getAuthority()) || "STUDENT".equalsIgnoreCase(authority.getAuthority())
+        );
     }
 }

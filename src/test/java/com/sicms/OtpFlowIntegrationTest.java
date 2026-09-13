@@ -138,7 +138,6 @@ public class OtpFlowIntegrationTest {
     }
 
     @Test
-    @org.springframework.transaction.annotation.Transactional
     void testStrictOtpFlowAndRejection() throws Exception {
         User user = userRepository.findByEmailIgnoreCase(testEmail).orElseThrow();
 

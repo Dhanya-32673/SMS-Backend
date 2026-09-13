@@ -6,7 +6,6 @@ import com.sicms.dto.StudentResponse;
 import com.sicms.entity.AcademicGroup;
 import com.sicms.entity.AcademicSection;
 import com.sicms.entity.Student;
-import com.sicms.entity.StudentAcademicDetail;
 import com.sicms.exception.StudentNotFoundException;
 import com.sicms.entity.FacultyAssignment;
 import com.sicms.repository.AcademicGroupRepository;
@@ -61,7 +60,7 @@ public class AcademicGroupService {
         AcademicGroup group = groupRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Academic Group with ID " + id + " not found."));
 
-        long studentCount = studentRepository.countByAcademicDetail_BranchGroupIgnoreCase(group.getCode());
+        long studentCount = studentRepository.countByBranchGroupIgnoreCase(group.getCode());
         if (studentCount > 0) {
             throw new IllegalArgumentException("Cannot delete Group '" + group.getCode() + "' because " + studentCount + " student(s) are assigned to it.");
         }
@@ -171,13 +170,10 @@ public class AcademicGroupService {
 
         for (String studentId : studentIds) {
             studentRepository.findByStudentId(studentId).ifPresent(student -> {
-                StudentAcademicDetail academic = student.getAcademicDetail();
-                if (academic != null) {
-                    academic.setSection(section.getName());
-                    if (section.getBranchGroup() != null) academic.setBranchGroup(section.getBranchGroup());
-                    if (section.getIntermediateYear() != null) academic.setIntermediateYear(section.getIntermediateYear());
-                    studentRepository.save(student);
-                }
+                student.setSection(section.getName());
+                if (section.getBranchGroup() != null) student.setBranchGroup(section.getBranchGroup());
+                if (section.getIntermediateYear() != null) student.setIntermediateYear(section.getIntermediateYear());
+                studentRepository.save(student);
             });
         }
     }
@@ -200,11 +196,8 @@ public class AcademicGroupService {
             throw new StudentNotFoundException("Student with ID " + studentId + " not found.");
         }
 
-        StudentAcademicDetail academic = student.getAcademicDetail();
-        if (academic != null) {
-            academic.setSection("Unassigned");
-            studentRepository.save(student);
-        }
+        student.setSection("Unassigned");
+        studentRepository.save(student);
     }
 
     @CacheEvict(value = {"sections", "sectionsResponses", "adminDashboard"}, allEntries = true)

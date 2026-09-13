@@ -62,7 +62,7 @@ public class StudentController {
     }
 
     /**
-     * ADMIN ONLY: Get server-side paginated & filtered list of students
+     * ADMIN & FACULTY: Get server-side paginated & filtered list of students
      */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
@@ -70,7 +70,10 @@ public class StudentController {
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String campus,
             @RequestParam(required = false) String department,
+            @RequestParam(required = false) String group,
+            @RequestParam(required = false) String branchGroup,
             @RequestParam(required = false) String academicYear,
             @RequestParam(required = false) Integer currentYear,
             @RequestParam(required = false) String section,
@@ -79,11 +82,48 @@ public class StudentController {
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir) {
 
+        String effectiveGroup = (group != null && !group.isBlank()) ? group.trim()
+                : ((branchGroup != null && !branchGroup.isBlank()) ? branchGroup.trim()
+                : (department != null && !department.isBlank() ? department.trim() : null));
+
         PaginatedStudentResponse<com.sicms.dto.StudentSummaryResponse> response = studentService.getStudents(
-                page, size, sortBy, sortDir, department, academicYear, currentYear, section, status, search,
+                page, size, sortBy, sortDir, campus, effectiveGroup, academicYear, currentYear, section, status, search,
                 userDetails != null ? userDetails.getUsername() : null,
                 isFaculty(userDetails)
         );
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * ADMIN & FACULTY: Get distinct available groups from database
+     */
+    @GetMapping("/groups")
+    @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY')")
+    public ResponseEntity<List<String>> getDistinctGroups() {
+        return ResponseEntity.ok(studentService.getDistinctGroups());
+    }
+
+    /**
+     * AUTHENTICATED STUDENT: Get currently logged-in student's own profile
+     */
+    @GetMapping({"/me", "/profile/me"})
+    @PreAuthorize("hasAnyRole('ADMIN', 'FACULTY', 'STUDENT') or hasAnyAuthority('ROLE_ADMIN', 'ROLE_FACULTY', 'ROLE_STUDENT', 'ADMIN', 'FACULTY', 'STUDENT')")
+    public ResponseEntity<StudentResponse> getCurrentStudentProfile(@AuthenticationPrincipal Object principal, java.security.Principal fallbackPrincipal) {
+        String identifier = null;
+        if (principal instanceof com.sicms.security.CustomUserDetails cud) {
+            identifier = cud.getEmail();
+        } else if (principal instanceof UserDetails ud) {
+            identifier = ud.getUsername();
+        } else if (principal instanceof String str) {
+            identifier = str;
+        } else if (fallbackPrincipal != null) {
+            identifier = fallbackPrincipal.getName();
+        }
+
+        if (identifier == null || identifier.isBlank() || "anonymousUser".equalsIgnoreCase(identifier)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        StudentResponse response = studentService.getStudentByEmailOrUserId(identifier);
         return ResponseEntity.ok(response);
     }
 
@@ -198,8 +238,27 @@ public class StudentController {
     @DeleteMapping("/{studentId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteStudent(@PathVariable String studentId) {
+        System.out.println(">>> [DELETE CONTROLLER] DELETE /api/students/" + studentId);
         studentService.deleteStudent(studentId);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * ADMIN ONLY: Bulk delete multiple students by IDs safely in one transaction
+     */
+    @DeleteMapping("/bulk")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<java.util.Map<String, Object>> deleteStudentsBulk(@RequestBody List<String> studentIds) {
+        System.out.println(">>> [BULK DELETE CONTROLLER] DELETE /api/students/bulk Payload: " + studentIds);
+        if (studentIds == null || studentIds.isEmpty()) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("message", "No student IDs provided for deletion", "count", 0));
+        }
+        int deletedCount = studentService.deleteStudentsBulk(studentIds);
+        System.out.println(">>> [BULK DELETE CONTROLLER] Response deleted count: " + deletedCount);
+        return ResponseEntity.ok(java.util.Map.of(
+                "message", deletedCount + " student" + (deletedCount != 1 ? "s" : "") + " deleted successfully",
+                "count", deletedCount
+        ));
     }
 
     private boolean isFaculty(UserDetails userDetails) {

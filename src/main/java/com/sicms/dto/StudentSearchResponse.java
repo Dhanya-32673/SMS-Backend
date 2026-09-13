@@ -6,14 +6,12 @@ import com.sicms.entity.StudentStatus;
 public class StudentSearchResponse {
 
     private String studentId;
-    private String rollNumber;
     private String admissionNumber;
     private String fullName;
     private String gender;
     private String profilePhotoUrl;
     private StudentStatus status;
 
-    private String department;
     private String branchGroup;
     private String intermediateYear;
     private String section;
@@ -22,25 +20,16 @@ public class StudentSearchResponse {
     }
 
     public StudentSearchResponse(Student student) {
+        if (student == null) return;
         this.studentId = student.getStudentId();
-        this.rollNumber = student.getRollNumber();
         this.admissionNumber = student.getAdmissionNumber();
         this.fullName = student.getFullName();
         this.gender = student.getGender();
         this.profilePhotoUrl = student.getProfilePhotoUrl();
         this.status = student.getStatus();
-
-        if (student.getAcademicDetail() != null) {
-            this.department = student.getAcademicDetail().getDepartment();
-            this.branchGroup = com.sicms.util.StudentFormatterUtil.formatBranchGroup(student.getAcademicDetail().getBranchGroup());
-            this.intermediateYear = com.sicms.util.StudentFormatterUtil.formatIntermediateYear(student.getAcademicDetail().getIntermediateYear());
-            this.section = com.sicms.util.StudentFormatterUtil.formatSection(student.getAcademicDetail().getSection());
-        } else {
-            this.department = "General";
-            this.branchGroup = "General";
-            this.intermediateYear = "1st Year";
-            this.section = "Unassigned";
-        }
+        this.branchGroup = com.sicms.util.StudentFormatterUtil.formatBranchGroup(student.getBranchGroup());
+        this.intermediateYear = com.sicms.util.StudentFormatterUtil.formatIntermediateYear(student.getIntermediateYear());
+        this.section = com.sicms.util.StudentFormatterUtil.formatSection(student.getSection());
     }
 
     // Getters and Setters
@@ -49,43 +38,71 @@ public class StudentSearchResponse {
         return studentId;
     }
 
-    public String getRollNumber() {
-        return rollNumber;
+    public void setStudentId(String studentId) {
+        this.studentId = studentId;
     }
 
     public String getAdmissionNumber() {
         return admissionNumber;
     }
 
+    public void setAdmissionNumber(String admissionNumber) {
+        this.admissionNumber = admissionNumber;
+    }
+
     public String getFullName() {
         return fullName;
+    }
+
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
     }
 
     public String getGender() {
         return gender;
     }
 
+    public void setGender(String gender) {
+        this.gender = gender;
+    }
+
     public String getProfilePhotoUrl() {
         return profilePhotoUrl;
+    }
+
+    public void setProfilePhotoUrl(String profilePhotoUrl) {
+        this.profilePhotoUrl = profilePhotoUrl;
     }
 
     public StudentStatus getStatus() {
         return status;
     }
 
-    public String getDepartment() {
-        return department;
+    public void setStatus(StudentStatus status) {
+        this.status = status;
     }
 
     public String getBranchGroup() {
         return branchGroup;
     }
 
+    public void setBranchGroup(String branchGroup) {
+        this.branchGroup = branchGroup;
+    }
+
     public String getIntermediateYear() {
         return intermediateYear;
     }
 
+    public void setIntermediateYear(String intermediateYear) {
+        this.intermediateYear = intermediateYear;
+    }
+
     public String getSection() {
         return section;
+    }
+
+    public void setSection(String section) {
+        this.section = section;
     }
 }

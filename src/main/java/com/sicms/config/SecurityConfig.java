@@ -69,6 +69,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/change-password",
                                 "/auth/change-password",
+                                "/api/auth/student/change-password",
+                                "/auth/student/change-password",
                                 "/api/profile/change-password",
                                 "/api/users/change-password"
                         ).authenticated()
@@ -100,6 +102,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ADMIN", "SUPER_ADMIN")
                         .requestMatchers("/api/dashboard/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_FACULTY", "ADMIN", "SUPER_ADMIN", "FACULTY")
                         .requestMatchers("/api/faculty/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_FACULTY", "ADMIN", "SUPER_ADMIN", "FACULTY")
+                        .requestMatchers("/api/students/me/**", "/api/student/me/**", "/api/documents/me/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_FACULTY", "ROLE_STUDENT", "ADMIN", "SUPER_ADMIN", "FACULTY", "STUDENT")
+                        .requestMatchers("/api/documents/*/file").hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_FACULTY", "ROLE_STUDENT", "ADMIN", "SUPER_ADMIN", "FACULTY", "STUDENT")
                         .requestMatchers("/api/documents/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_FACULTY", "ADMIN", "SUPER_ADMIN", "FACULTY")
                         .anyRequest().authenticated()
                 )

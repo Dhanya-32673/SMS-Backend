@@ -159,7 +159,7 @@ public class EmailService {
         String htmlContent = String.format("""
             <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; max-width: 560px; margin: auto; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
                 <div style="text-align: center; margin-bottom: 20px;">
-                    <h2 style="color: #2563eb; margin: 0; font-size: 20px; font-weight: 800;">Student Information & Certificate Management System</h2>
+                    <h2 style="color: #2563eb; margin: 0; font-size: 20px; font-weight: 800;">Bhashyam IIT JEE Academy</h2>
                     <p style="color: #64748b; font-size: 13px; margin-top: 4px;">SICMS Secure Authentication — %s</p>
                 </div>
                 <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 16px 0;" />
@@ -169,7 +169,7 @@ public class EmailService {
                     <span style="font-size: 32px; font-weight: 800; letter-spacing: 10px; color: #1e3a8a;">%s</span>
                 </div>
                 <p style="color: #64748b; font-size: 13px; margin-bottom: 20px;">This code is valid for <strong>5 minutes</strong>.<br/>Do not share this OTP with anyone for security reasons.</p>
-                <p style="font-size: 14px; margin-bottom: 0;">Regards,<br/><strong>SICMS Administration</strong></p>
+                <p style="font-size: 14px; margin-bottom: 0;">Regards,<br/><strong>Bhashyam IIT JEE Academy Administration</strong></p>
                 <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0 16px 0;" />
                 <p style="font-size: 11px; color: #94a3b8; text-align: center; margin: 0;">If you did not request this OTP, please ignore this email or contact support.</p>
             </div>

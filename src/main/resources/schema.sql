@@ -35,6 +35,8 @@ CREATE TABLE users (
     profile_photo_url TEXT,
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     account_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+    student_id BIGINT REFERENCES students(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     last_login TIMESTAMP WITH TIME ZONE
@@ -179,87 +181,30 @@ CREATE TABLE faculty_assignments (
 CREATE TABLE students (
     id BIGSERIAL PRIMARY KEY,
     student_id VARCHAR(30) NOT NULL UNIQUE,
-    roll_number VARCHAR(50) NOT NULL UNIQUE,
     admission_number VARCHAR(50),
-    first_name VARCHAR(50) NOT NULL,
-    middle_name VARCHAR(50),
-    last_name VARCHAR(50) NOT NULL,
     full_name VARCHAR(150) NOT NULL,
     gender VARCHAR(20) NOT NULL,
     date_of_birth DATE NOT NULL,
-    blood_group VARCHAR(10),
     nationality VARCHAR(50) DEFAULT 'Indian',
     religion VARCHAR(50),
-    caste_category VARCHAR(50),
+    category VARCHAR(50),
     aadhaar_number VARCHAR(20),
-    pan_number VARCHAR(20),
-    identification_marks TEXT,
     profile_photo_url TEXT,
-    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-    created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
-CREATE TABLE student_academic_details (
-    id BIGSERIAL PRIMARY KEY,
-    student_id BIGINT NOT NULL UNIQUE REFERENCES students(id) ON DELETE CASCADE,
+    mobile_number VARCHAR(20) NOT NULL,
+    alternate_mobile VARCHAR(20),
+    email_address_1 VARCHAR(150) NOT NULL,
+    email_address_2 VARCHAR(150),
+    father_name VARCHAR(100) NOT NULL,
+    mother_name VARCHAR(100) NOT NULL,
+    academic_year VARCHAR(20) NOT NULL,
     branch_group VARCHAR(50) NOT NULL,
     intermediate_year VARCHAR(20) NOT NULL,
-    section VARCHAR(10) NOT NULL,
-    academic_year VARCHAR(20) NOT NULL,
-    semester VARCHAR(20),
-    department VARCHAR(100),
-    batch VARCHAR(20),
-    regulation VARCHAR(20),
-    admission_type VARCHAR(30),
-    hostel_day_scholar VARCHAR(30),
-    medium VARCHAR(30),
-    university_id VARCHAR(50),
-    admission_date DATE,
+    batch VARCHAR(20) NOT NULL,
+    admission_type VARCHAR(30) DEFAULT 'REGULAR',
+    hostel_day_scholar VARCHAR(30) NOT NULL DEFAULT 'DAY_SCHOLAR',
+    section VARCHAR(10) NOT NULL DEFAULT 'Unassigned',
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
-CREATE TABLE student_contact_details (
-    id BIGSERIAL PRIMARY KEY,
-    student_id BIGINT NOT NULL UNIQUE REFERENCES students(id) ON DELETE CASCADE,
-    email VARCHAR(150),
-    mobile_number VARCHAR(20),
-    alternate_mobile VARCHAR(20),
-    address TEXT,
-    city VARCHAR(50),
-    district VARCHAR(50),
-    state VARCHAR(50),
-    pin_code VARCHAR(20),
-    country VARCHAR(50) DEFAULT 'India',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
-CREATE TABLE student_parent_details (
-    id BIGSERIAL PRIMARY KEY,
-    student_id BIGINT NOT NULL UNIQUE REFERENCES students(id) ON DELETE CASCADE,
-    father_name VARCHAR(100),
-    mother_name VARCHAR(100),
-    parent_mobile VARCHAR(20),
-    parent_email VARCHAR(150),
-    occupation VARCHAR(100),
-    annual_income NUMERIC(12,2),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
-CREATE TABLE student_guardians (
-    id BIGSERIAL PRIMARY KEY,
-    student_id BIGINT NOT NULL UNIQUE REFERENCES students(id) ON DELETE CASCADE,
-    guardian_name VARCHAR(100) NOT NULL,
-    relationship VARCHAR(50),
-    guardian_mobile VARCHAR(20),
-    guardian_email VARCHAR(150),
-    occupation VARCHAR(100),
-    address TEXT,
+    created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
@@ -352,55 +297,18 @@ VALUES
     ('AADHAAR_DOC', 'Aadhaar Card Document', 'IDENTITY', 'Government issued Aadhaar identity card scan', TRUE, TRUE)
 ON CONFLICT (code) DO NOTHING;
 
--- 6. SEED STUDENTS
-INSERT INTO students (id, student_id, roll_number, admission_number, first_name, last_name, full_name, gender, date_of_birth, status)
-VALUES 
-    (1, 'STU2026001001', '26MPC101', 'ADM2026101', 'Priya', 'Sharma', 'Priya Sharma', 'FEMALE', '2008-05-14', 'ACTIVE'),
-    (2, 'STU2026001002', '26MPC102', 'ADM2026102', 'Rohit', 'Kumar', 'Rohit Kumar', 'MALE', '2008-03-22', 'ACTIVE'),
-    (3, 'STU2026001003', '26MPC103', 'ADM2026103', 'Anjali', 'Verma', 'Anjali Verma', 'FEMALE', '2007-09-18', 'ACTIVE'),
-    (4, 'STU2026001004', '26BIPC101', 'ADM2026104', 'Vivek', 'Patel', 'Vivek Patel', 'MALE', '2008-11-05', 'ACTIVE'),
-    (5, 'STU2026001005', '26MEC101', 'ADM2026105', 'Neha', 'Singh', 'Neha Singh', 'FEMALE', '2008-01-30', 'ACTIVE'),
-    (6, 'STU2026001006', '26CEC101', 'ADM2026106', 'Karthik', 'Raju', 'Karthik Raju', 'MALE', '2007-07-12', 'ACTIVE'),
-    (7, 'STU2026001007', '26HEC101', 'ADM2026107', 'Rahul', 'Reddy', 'Rahul Reddy', 'MALE', '2008-06-10', 'ACTIVE'),
-    (8, 'STU2026001008', '26HEC8426', 'ADM5433', 'Test', 'Student', 'Test Student', 'MALE', '2008-01-01', 'ACTIVE'),
-    (9, 'STU2026001009', '24800032673', '2446475', 'ANDE', 'DHANYA', 'ANDE DHANYA', 'FEMALE', '2006-08-15', 'ACTIVE')
-ON CONFLICT (id) DO NOTHING;
-
--- 7. SEED STUDENT ACADEMIC DETAILS
-INSERT INTO student_academic_details (student_id, branch_group, intermediate_year, section, academic_year, department, batch, regulation, admission_type, hostel_day_scholar, medium, admission_date, status)
-VALUES 
-    (1, 'MPC', '1st Year', 'A', '2026-2027', 'General Sciences', '2026-2028', 'R26', 'REGULAR', 'DAY_SCHOLAR', 'English', '2026-06-01', 'ACTIVE'),
-    (2, 'MPC', '1st Year', 'A', '2026-2027', 'General Sciences', '2026-2028', 'R26', 'REGULAR', 'DAY_SCHOLAR', 'English', '2026-06-01', 'ACTIVE'),
-    (3, 'MPC', '2nd Year', 'A', '2026-2027', 'General Sciences', '2025-2027', 'R25', 'REGULAR', 'DAY_SCHOLAR', 'English', '2025-06-01', 'ACTIVE'),
-    (4, 'BiPC', '1st Year', 'A', '2026-2027', 'Biological Sciences', '2026-2028', 'R26', 'REGULAR', 'DAY_SCHOLAR', 'English', '2026-06-01', 'ACTIVE'),
-    (5, 'MEC', '1st Year', 'B', '2026-2027', 'Commerce & Economics', '2026-2028', 'R26', 'REGULAR', 'DAY_SCHOLAR', 'English', '2026-06-01', 'ACTIVE'),
-    (6, 'CEC', '2nd Year', 'A', '2026-2027', 'Commerce & Civics', '2025-2027', 'R25', 'REGULAR', 'DAY_SCHOLAR', 'English', '2025-06-01', 'ACTIVE'),
-    (7, 'HEC', '1st Year', 'A', '2026-2027', 'Humanities & Social Studies', '2026-2028', 'R26', 'REGULAR', 'DAY_SCHOLAR', 'English', '2026-06-01', 'ACTIVE'),
-    (8, 'HEC', '1st Year', 'A', '2026-2027', 'Humanities & Social Studies', '2026-2028', 'R26', 'REGULAR', 'DAY_SCHOLAR', 'English', '2026-06-01', 'ACTIVE'),
-    (9, 'MPC', '1st Year', 'A', '2026-2027', 'General Sciences', '2026-2028', 'R26', 'REGULAR', 'DAY_SCHOLAR', 'English', '2026-06-01', 'ACTIVE');
-
--- 8. SEED STUDENT CONTACT DETAILS
-INSERT INTO student_contact_details (student_id, email, mobile_number, address, city, district, state, pin_code, country)
-VALUES 
-    (1, 'priya.sharma@gmail.com', '9876543210', '12-3-45 MG Road', 'Hyderabad', 'Hyderabad', 'Telangana', '500001', 'India'),
-    (2, 'rohit.kumar@gmail.com', '9876543211', '45-6-78 Station Road', 'Hyderabad', 'Hyderabad', 'Telangana', '500002', 'India'),
-    (3, 'anjali.verma@gmail.com', '9876543212', '78-9-10 Tank Bund', 'Hyderabad', 'Hyderabad', 'Telangana', '500003', 'India');
-
--- 9. SEED STUDENT PARENT DETAILS
-INSERT INTO student_parent_details (student_id, father_name, mother_name, parent_mobile)
-VALUES 
-    (1, 'Ram Sharma', 'Sita Sharma', '9876500001'),
-    (2, 'Vijay Kumar', 'Sunita Kumar', '9876500002'),
-    (3, 'Sanjay Verma', 'Geeta Verma', '9876500003');
-
 -- ============================================================
 -- PERFORMANCE INDEXES FOR SUB-1-SECOND QUERY EXECUTION
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_students_status ON students(status);
-CREATE INDEX IF NOT EXISTS idx_academic_details_section_id ON student_academic_details(academic_section_id);
-CREATE INDEX IF NOT EXISTS idx_academic_details_branch_group ON student_academic_details(branch_group);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_students_admission_number ON students (admission_number) WHERE admission_number IS NOT NULL AND admission_number <> '';
+CREATE INDEX IF NOT EXISTS idx_students_branch_group ON students(branch_group);
+CREATE INDEX IF NOT EXISTS idx_students_academic_year ON students(academic_year);
+CREATE INDEX IF NOT EXISTS idx_students_section ON students(section);
+CREATE INDEX IF NOT EXISTS idx_students_mobile ON students(mobile_number);
+CREATE INDEX IF NOT EXISTS idx_students_email_1 ON students(email_address_1);
 CREATE INDEX IF NOT EXISTS idx_student_docs_status ON student_documents(status);
 CREATE INDEX IF NOT EXISTS idx_student_docs_student_status ON student_documents(student_id, status);
-CREATE INDEX IF NOT EXISTS idx_faculty_assignments_faculty_id ON faculty_section_assignments(faculty_id);
-CREATE INDEX IF NOT EXISTS idx_faculty_assignments_section_id ON faculty_section_assignments(academic_section_id);
+CREATE INDEX IF NOT EXISTS idx_faculty_assignments_faculty_id ON faculty_assignments(faculty_id);
+
 
